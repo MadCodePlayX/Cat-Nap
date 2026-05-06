@@ -10,6 +10,7 @@ import ProductDetail from "@/pages/products/[id]";
 import Jobs from "@/pages/jobs/index";
 import JobDetail from "@/pages/jobs/[id]";
 import Workers from "@/pages/workers/index";
+import Setup from "@/pages/setup/index";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,7 @@ function Router() {
         <Route path="/jobs" component={Jobs} />
         <Route path="/jobs/:id" component={JobDetail} />
         <Route path="/workers" component={Workers} />
+        <Route path="/setup" component={Setup} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

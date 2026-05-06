@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Package, PlaySquare, Server, Settings } from "lucide-react";
+import { LayoutDashboard, Package, PlaySquare, Server, BookOpen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -7,6 +7,7 @@ const links = [
   { href: "/products", label: "Products", icon: Package },
   { href: "/jobs", label: "Render Queue", icon: PlaySquare },
   { href: "/workers", label: "Workers", icon: Server },
+  { href: "/setup", label: "Setup Guide", icon: BookOpen },
 ];
 
 export function Sidebar() {
