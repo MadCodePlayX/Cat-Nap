@@ -17,9 +17,12 @@ import {
 
 const router: IRouter = Router();
 
+// Drizzle returns Date objects; Zod schemas expect ISO strings
+function ser<T>(v: T): T { return JSON.parse(JSON.stringify(v)); }
+
 router.get("/products", async (_req, res): Promise<void> => {
   const products = await db.select().from(productsTable).orderBy(productsTable.createdAt);
-  res.json(ListProductsResponse.parse(products));
+  res.json(ListProductsResponse.parse(ser(products)));
 });
 
 router.post("/products", async (req, res): Promise<void> => {
@@ -40,7 +43,7 @@ router.post("/products", async (req, res): Promise<void> => {
     imageUrls: data.imageUrls ?? [],
     sourceUrl: data.sourceUrl ?? null,
   }).returning();
-  res.status(201).json(GetProductResponse.parse(product));
+  res.status(201).json(GetProductResponse.parse(ser(product)));
 });
 
 router.get("/products/:id", async (req, res): Promise<void> => {
@@ -54,7 +57,7 @@ router.get("/products/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Product not found" });
     return;
   }
-  res.json(GetProductResponse.parse(product));
+  res.json(GetProductResponse.parse(ser(product)));
 });
 
 router.patch("/products/:id", async (req, res): Promise<void> => {
@@ -85,7 +88,7 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Product not found" });
     return;
   }
-  res.json(UpdateProductResponse.parse(product));
+  res.json(UpdateProductResponse.parse(ser(product)));
 });
 
 router.delete("/products/:id", async (req, res): Promise<void> => {
@@ -120,7 +123,7 @@ router.post("/products/:id/images", async (req, res): Promise<void> => {
   }
   const newUrls = [...(existing.imageUrls ?? []), parsed.data.imageUrl];
   const [product] = await db.update(productsTable).set({ imageUrls: newUrls }).where(eq(productsTable.id, params.data.id)).returning();
-  res.json(AddProductImageResponse.parse(product));
+  res.json(AddProductImageResponse.parse(ser(product)));
 });
 
 export default router;

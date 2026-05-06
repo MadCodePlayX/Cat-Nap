@@ -15,6 +15,11 @@ import {
 
 const router: IRouter = Router();
 
+// Drizzle returns Date objects and nulls; Zod schemas expect ISO strings and undefined
+function ser<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v), (_k, val) => (val === null ? undefined : val));
+}
+
 async function enrichJob(job: typeof renderJobsTable.$inferSelect) {
   const [product] = await db.select({ name: productsTable.name }).from(productsTable).where(eq(productsTable.id, job.productId));
   return { ...job, productName: product?.name ?? "Unknown" };
@@ -32,7 +37,7 @@ router.get("/jobs/next", async (_req, res): Promise<void> => {
     return;
   }
   const enriched = await enrichJob(job);
-  res.json({ job: GetJobResponse.parse(enriched) });
+  res.json({ job: GetJobResponse.parse(ser(enriched)) });
 });
 
 router.get("/jobs", async (req, res): Promise<void> => {
@@ -55,7 +60,7 @@ router.get("/jobs", async (req, res): Promise<void> => {
     .orderBy(desc(renderJobsTable.createdAt));
 
   const enriched = await Promise.all(jobs.map(enrichJob));
-  res.json(ListJobsResponse.parse(enriched));
+  res.json(ListJobsResponse.parse(ser(enriched)));
 });
 
 router.post("/jobs", async (req, res): Promise<void> => {
@@ -77,7 +82,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
     status: "pending",
   }).returning();
   const enriched = await enrichJob(job);
-  res.status(201).json(GetJobResponse.parse(enriched));
+  res.status(201).json(GetJobResponse.parse(ser(enriched)));
 });
 
 router.get("/jobs/:id", async (req, res): Promise<void> => {
@@ -92,7 +97,7 @@ router.get("/jobs/:id", async (req, res): Promise<void> => {
     return;
   }
   const enriched = await enrichJob(job);
-  res.json(GetJobResponse.parse(enriched));
+  res.json(GetJobResponse.parse(ser(enriched)));
 });
 
 router.delete("/jobs/:id", async (req, res): Promise<void> => {
@@ -138,7 +143,7 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     return;
   }
   const enriched = await enrichJob(job);
-  res.json(UpdateJobStatusResponse.parse(enriched));
+  res.json(UpdateJobStatusResponse.parse(ser(enriched)));
 });
 
 export default router;

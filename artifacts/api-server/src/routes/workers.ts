@@ -10,9 +10,11 @@ import {
 
 const router: IRouter = Router();
 
+function ser<T>(v: T): T { return JSON.parse(JSON.stringify(v)); }
+
 router.get("/workers", async (_req, res): Promise<void> => {
   const workers = await db.select().from(workersTable).orderBy(workersTable.createdAt);
-  res.json(ListWorkersResponse.parse(workers));
+  res.json(ListWorkersResponse.parse(ser(workers)));
 });
 
 router.post("/workers", async (req, res): Promise<void> => {
@@ -27,7 +29,7 @@ router.post("/workers", async (req, res): Promise<void> => {
     status: "online",
     lastHeartbeat: new Date(),
   }).returning();
-  res.status(201).json(worker);
+  res.status(201).json(ser(worker));
 });
 
 router.post("/workers/:id/heartbeat", async (req, res): Promise<void> => {
@@ -44,7 +46,7 @@ router.post("/workers/:id/heartbeat", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
-  res.json(WorkerHeartbeatResponse.parse(worker));
+  res.json(WorkerHeartbeatResponse.parse(ser(worker)));
 });
 
 export default router;
