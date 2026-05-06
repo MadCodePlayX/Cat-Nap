@@ -70,19 +70,26 @@ echo "[3/5] Pre-downloading rembg background removal model ..."
 python3 -c "from rembg import remove; from PIL import Image; remove(Image.new('RGB', (64,64)))"
 echo "      rembg model cached ✓"
 
-# ── 4. Blender check ──────────────────────────────────────
+# ── 4. Blender 4.x ────────────────────────────────────────
 echo ""
-echo "[4/5] Checking Blender installation ..."
+echo "[4/5] Checking / installing Blender 4.x ..."
 if command -v blender &> /dev/null; then
   BLENDER_VER=$(blender --version 2>&1 | head -1)
   echo "      $BLENDER_VER ✓"
 else
-  echo ""
-  echo "  ⚠️  Blender not found on PATH."
-  echo "  Download Blender 4.x from https://www.blender.org/download/"
-  echo "  Then add it to your PATH, e.g.:"
-  echo "    export PATH=\$PATH:/path/to/blender-4.x/bin"
-  echo ""
+  echo "      Blender not found — downloading Blender 4.3.2 ..."
+  BLENDER_VERSION="4.3.2"
+  BLENDER_TARBALL="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+  BLENDER_URL="https://download.blender.org/release/Blender4.3/${BLENDER_TARBALL}"
+  BLENDER_INSTALL_DIR="/opt/blender"
+
+  wget -q --show-progress -O "/tmp/${BLENDER_TARBALL}" "${BLENDER_URL}"
+  mkdir -p "${BLENDER_INSTALL_DIR}"
+  tar -xf "/tmp/${BLENDER_TARBALL}" -C "${BLENDER_INSTALL_DIR}" --strip-components=1
+  rm "/tmp/${BLENDER_TARBALL}"
+
+  ln -sf "${BLENDER_INSTALL_DIR}/blender" /usr/local/bin/blender
+  echo "      Blender $(blender --version 2>&1 | head -1) installed ✓"
 fi
 
 # ── 5. Done ───────────────────────────────────────────────
