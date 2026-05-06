@@ -160,7 +160,6 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     from PIL import Image as PILImage
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
-    from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,18 +175,8 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     print("      Generating 3D mesh ...")
     mesh = pipeline_shapegen(image=image)[0]
 
-    # Texture generation (paint the mesh) — requires custom_rasterizer compiled
-    try:
-        print("      Loading texture pipeline ...")
-        pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
-            "tencent/Hunyuan3D-2",
-        )
-        print("      Painting texture ...")
-        mesh = pipeline_texgen(mesh, image=image)
-        print("      Texture applied ✓")
-    except (ModuleNotFoundError, ImportError, AttributeError, Exception) as e:
-        print(f"      ⚠ Texture pipeline unavailable ({type(e).__name__}: {e}) — exporting untextured mesh.")
-        print("      Untextured GLB is fine — Blender applies materials in the scene step.")
+    # Texture step skipped — Blender applies its own materials in the scene render.
+    # (custom_rasterizer source not published by Tencent; texturing adds no value here)
 
     # Export as GLB
     generated = work_dir / "model.glb"
