@@ -153,6 +153,10 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     # Add Hunyuan3D-2 to path so hy3dgen imports work
     if str(hunyuan_dir) not in sys.path:
         sys.path.insert(0, str(hunyuan_dir))
+    # Also add differentiable_renderer dir so custom_rasterizer.so is findable
+    dr_path = str(hunyuan_dir / "hy3dgen" / "texgen" / "differentiable_renderer")
+    if dr_path not in sys.path:
+        sys.path.insert(0, dr_path)
 
     from PIL import Image as PILImage
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
