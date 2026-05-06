@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: 3D Product Visualization Pipeline API for pet products
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: products
+    description: Product management
+  - name: jobs
+    description: Render job management
+  - name: workers
+    description: Worker node management
+  - name: stats
+    description: Dashboard statistics
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,386 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /products/{id}/images:
+    post:
+      operationId: addProductImage
+      tags: [products]
+      summary: Add an image URL to a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddImageBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List all render jobs
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: productId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RenderJob"
+    post:
+      operationId: createJob
+      tags: [jobs]
+      summary: Create a new render job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobBody"
+      responses:
+        "201":
+          description: Created job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Get a job by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteJob
+      tags: [jobs]
+      summary: Cancel/delete a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /jobs/{id}/status:
+    patch:
+      operationId: updateJobStatus
+      tags: [jobs]
+      summary: Update a job's status and outputs (called by worker nodes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateJobStatusBody"
+      responses:
+        "200":
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /jobs/next:
+    get:
+      operationId: getNextJob
+      tags: [jobs]
+      summary: Get the next pending job for a worker to process
+      responses:
+        "200":
+          description: Next job or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NextJobResponse"
+
+  /workers:
+    get:
+      operationId: listWorkers
+      tags: [workers]
+      summary: List registered worker nodes
+      responses:
+        "200":
+          description: List of workers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+    post:
+      operationId: registerWorker
+      tags: [workers]
+      summary: Register a worker node (called by local PC)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterWorkerBody"
+      responses:
+        "201":
+          description: Registered worker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+
+  /workers/{id}/heartbeat:
+    post:
+      operationId: workerHeartbeat
+      tags: [workers]
+      summary: Worker heartbeat to signal it is alive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stats/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [stats]
+      summary: Dashboard summary stats
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /stats/jobs-by-status:
+    get:
+      operationId: getJobsByStatus
+      tags: [stats]
+      summary: Job counts broken down by status
+      responses:
+        "200":
+          description: Job counts by status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobStatusCount"
+
+  /stats/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [stats]
+      summary: Recent pipeline activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +423,298 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        category:
+          type: string
+        material:
+          type: ["string", "null"]
+        dimensionsL:
+          type: ["number", "null"]
+        dimensionsW:
+          type: ["number", "null"]
+        dimensionsH:
+          type: ["number", "null"]
+        imageUrls:
+          type: array
+          items:
+            type: string
+        sourceUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - category
+        - imageUrls
+        - createdAt
+        - updatedAt
+
+    CreateProductBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        category:
+          type: string
+        material:
+          type: ["string", "null"]
+        dimensionsL:
+          type: ["number", "null"]
+        dimensionsW:
+          type: ["number", "null"]
+        dimensionsH:
+          type: ["number", "null"]
+        imageUrls:
+          type: array
+          items:
+            type: string
+        sourceUrl:
+          type: ["string", "null"]
+      required:
+        - name
+        - category
+
+    UpdateProductBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        material:
+          type: ["string", "null"]
+        dimensionsL:
+          type: ["number", "null"]
+        dimensionsW:
+          type: ["number", "null"]
+        dimensionsH:
+          type: ["number", "null"]
+        imageUrls:
+          type: array
+          items:
+            type: string
+        sourceUrl:
+          type: ["string", "null"]
+
+    AddImageBody:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+      required:
+        - imageUrl
+
+    RenderJob:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        status:
+          type: string
+          enum: [pending, claimed, generating_3d, compositing, rendering_video, completed, failed]
+        stage:
+          type: string
+        sceneType:
+          type: string
+          enum: [living_room, bedroom, balcony, garden, kitchen]
+        animalType:
+          type: string
+          enum: [cat, dog, none]
+        priority:
+          type: integer
+        workerId:
+          type: ["integer", "null"]
+        modelUrl:
+          type: ["string", "null"]
+        videoUrl:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        progressPct:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        completedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - productId
+        - productName
+        - status
+        - sceneType
+        - animalType
+        - priority
+        - createdAt
+        - updatedAt
+
+    CreateJobBody:
+      type: object
+      properties:
+        productId:
+          type: integer
+        sceneType:
+          type: string
+          enum: [living_room, bedroom, balcony, garden, kitchen]
+        animalType:
+          type: string
+          enum: [cat, dog, none]
+        priority:
+          type: integer
+      required:
+        - productId
+        - sceneType
+        - animalType
+
+    UpdateJobStatusBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, claimed, generating_3d, compositing, rendering_video, completed, failed]
+        stage:
+          type: ["string", "null"]
+        workerId:
+          type: ["integer", "null"]
+        modelUrl:
+          type: ["string", "null"]
+        videoUrl:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        progressPct:
+          type: ["integer", "null"]
+        completedAt:
+          type: ["string", "null"]
+      required:
+        - status
+
+    NextJobResponse:
+      type: object
+      properties:
+        job:
+          oneOf:
+            - $ref: "#/components/schemas/RenderJob"
+            - type: "null"
+      required:
+        - job
+
+    Worker:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gpuModel:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [online, offline, busy]
+        lastHeartbeat:
+          type: ["string", "null"]
+        jobsCompleted:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - status
+        - jobsCompleted
+        - createdAt
+
+    RegisterWorkerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        gpuModel:
+          type: ["string", "null"]
+      required:
+        - name
+
+    DashboardStats:
+      type: object
+      properties:
+        totalProducts:
+          type: integer
+        totalJobs:
+          type: integer
+        completedJobs:
+          type: integer
+        pendingJobs:
+          type: integer
+        activeWorkers:
+          type: integer
+        successRate:
+          type: number
+      required:
+        - totalProducts
+        - totalJobs
+        - completedJobs
+        - pendingJobs
+        - activeWorkers
+        - successRate
+
+    JobStatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required:
+        - status
+        - count
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        label:
+          type: string
+        detail:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+      required:
+        - id
+        - type
+        - label
+        - timestamp

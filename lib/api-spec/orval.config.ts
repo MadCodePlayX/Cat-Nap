@@ -14,6 +14,8 @@ const titleTransformer: InputTransformerFn = (config) => {
 };
 
 export default defineConfig({
+  // Note: after codegen, manually verify lib/api-zod/src/index.ts only exports from generated/api
+
   "api-client-react": {
     input: {
       target: "./openapi.yaml",
@@ -51,7 +53,6 @@ export default defineConfig({
       workspace: apiZodSrc,
       client: "zod",
       target: "generated",
-      schemas: { path: "generated/types", type: "typescript" },
       mode: "split",
       clean: true,
       prettier: true,
