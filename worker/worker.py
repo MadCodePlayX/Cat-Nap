@@ -135,42 +135,55 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
                         hunyuan_dir: Path | None = None) -> Path:
     """
     Run Hunyuan3D-2 inference to generate a .glb from a single image.
+    Uses the hy3dgen Python API directly (no infer.py subprocess).
     hunyuan_dir defaults to worker/../Hunyuan3D-2/ (set by setup.sh).
     Override with --hunyuan-dir if you cloned it elsewhere (e.g. network volume).
     """
     if hunyuan_dir is None:
         hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2"
-    infer_script = hunyuan_dir / "infer.py"
 
-    if not infer_script.exists():
+    # Validate the repo is present
+    if not (hunyuan_dir / "hy3dgen").exists():
         raise RuntimeError(
             f"Hunyuan3D-2 not found at {hunyuan_dir}.\n"
-            "Run setup.sh first to clone and install it."
+            "Run: git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git "
+            f"{hunyuan_dir} && pip install -e {hunyuan_dir}"
         )
 
-    cmd = [
-        sys.executable,
-        str(infer_script),
-        "--image", str(image_path),
-        "--output-dir", str(work_dir),
-        "--output-name", "model",
-        "--device", "cuda",
-        "--steps", "50",           # high quality
-        "--guidance-scale", "7.5",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(hunyuan_dir))
-    if result.returncode != 0:
-        raise RuntimeError(f"Hunyuan3D-2 failed:\n{result.stderr[-2000:]}")
+    # Add Hunyuan3D-2 to path so hy3dgen imports work
+    if str(hunyuan_dir) not in sys.path:
+        sys.path.insert(0, str(hunyuan_dir))
 
-    # Hunyuan3D-2 outputs model.glb in work_dir
+    from PIL import Image as PILImage
+    from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
+    from hy3dgen.texgen import Hunyuan3DPaintPipeline
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load image — must be RGBA with background removed
+    image = PILImage.open(image_path).convert("RGBA")
+
+    # Shape generation (image → 3D mesh)
+    print("      Loading shape pipeline ...")
+    pipeline_shapegen = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+        "tencent/Hunyuan3D-2",
+        device="cuda",
+    )
+    print("      Generating 3D mesh ...")
+    mesh = pipeline_shapegen(image=image)[0]
+
+    # Texture generation (paint the mesh)
+    print("      Loading texture pipeline ...")
+    pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
+    print("      Painting texture ...")
+    mesh = pipeline_texgen(mesh, image=image)
+
+    # Export as GLB
     generated = work_dir / "model.glb"
+    mesh.export(str(generated))
+
     if not generated.exists():
-        # Some versions output as model.obj — convert if needed
-        generated_obj = work_dir / "model.obj"
-        if generated_obj.exists():
-            _convert_obj_to_glb(generated_obj, generated)
-        else:
-            raise RuntimeError(f"Hunyuan3D-2 output not found in {work_dir}")
+        raise RuntimeError(f"Hunyuan3D-2 export failed — GLB not found at {generated}")
 
     shutil.copy(generated, output_glb)
     return output_glb
