@@ -179,7 +179,10 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     # Texture generation (paint the mesh) — requires custom_rasterizer compiled
     try:
         print("      Loading texture pipeline ...")
-        pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
+        pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
+            "tencent/Hunyuan3D-2",
+            trust_remote_code=True,
+        )
         print("      Painting texture ...")
         mesh = pipeline_texgen(mesh, image=image)
         print("      Texture applied ✓")
