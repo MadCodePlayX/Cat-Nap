@@ -172,11 +172,18 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     print("      Generating 3D mesh ...")
     mesh = pipeline_shapegen(image=image)[0]
 
-    # Texture generation (paint the mesh)
-    print("      Loading texture pipeline ...")
-    pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
-    print("      Painting texture ...")
-    mesh = pipeline_texgen(mesh, image=image)
+    # Texture generation (paint the mesh) — requires custom_rasterizer compiled
+    try:
+        print("      Loading texture pipeline ...")
+        pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
+        print("      Painting texture ...")
+        mesh = pipeline_texgen(mesh, image=image)
+        print("      Texture applied ✓")
+    except (ModuleNotFoundError, ImportError) as e:
+        print(f"      ⚠ Texture pipeline unavailable ({e}) — exporting untextured mesh.")
+        print("      To enable textures, run on RunPod:")
+        print("        cd /workspace/Hunyuan3D-2/hy3dgen/texgen/differentiable_renderer")
+        print("        pip install -e .")
 
     # Export as GLB
     generated = work_dir / "model.glb"
