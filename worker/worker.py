@@ -102,7 +102,10 @@ class StudioAPI:
 
 
 # ── Image utilities ────────────────────────────────────────────────────────────
-def download_image(url: str, dest: Path) -> Path:
+def download_image(url: str, dest: Path, api_base: str = "") -> Path:
+    # Handle relative URLs (e.g. /products/image.png served by the web app)
+    if url.startswith("/"):
+        url = api_base.rstrip("/") + url
     r = requests.get(url, timeout=30, stream=True)
     r.raise_for_status()
     with open(dest, "wb") as f:
@@ -128,13 +131,15 @@ def prepare_image(src: Path, dest: Path, size: int = MAX_IMAGE_SIZE) -> Path:
 
 
 # ── 3D Generation: Hunyuan3D-2 ─────────────────────────────────────────────────
-def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path) -> Path:
+def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
+                        hunyuan_dir: Path | None = None) -> Path:
     """
     Run Hunyuan3D-2 inference to generate a .glb from a single image.
-    Hunyuan3D-2 repo must be cloned at: worker/../Hunyuan3D-2/
-    Install it once with: pip install -e Hunyuan3D-2/
+    hunyuan_dir defaults to worker/../Hunyuan3D-2/ (set by setup.sh).
+    Override with --hunyuan-dir if you cloned it elsewhere (e.g. network volume).
     """
-    hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2"
+    if hunyuan_dir is None:
+        hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2"
     infer_script = hunyuan_dir / "infer.py"
 
     if not infer_script.exists():
@@ -220,7 +225,8 @@ def render_scene(
 
 
 # ── Job processor ──────────────────────────────────────────────────────────────
-def process_job(api: StudioAPI, job: dict, worker_id: int) -> None:
+def process_job(api: StudioAPI, job: dict, worker_id: int,
+                hunyuan_dir: Path | None = None, api_base: str = "") -> None:
     job_id = job["id"]
     product_id = job["productId"]
     scene_type = job["sceneType"]          # living_room | bedroom | balcony | garden | kitchen
@@ -250,7 +256,7 @@ def process_job(api: StudioAPI, job: dict, worker_id: int) -> None:
             raw_images = []
             for i, url in enumerate(image_urls[:4]):  # use up to 4 images
                 dest = tmp / f"raw_{i}.jpg"
-                download_image(url, dest)
+                download_image(url, dest, api_base=api_base)
                 raw_images.append(dest)
 
             # ── 3. Remove background + prepare ────────────────────────────
@@ -267,7 +273,8 @@ def process_job(api: StudioAPI, job: dict, worker_id: int) -> None:
             # ── 4. Hunyuan3D-2: Image → 3D model ──────────────────────────
             progress("generating_3d", "Running Hunyuan3D-2 (3D generation)", 15)
             model_glb = tmp / "product_model.glb"
-            generate_3d_hunyuan(primary_image, model_glb, tmp / "hunyuan_out")
+            generate_3d_hunyuan(primary_image, model_glb, tmp / "hunyuan_out",
+                               hunyuan_dir=hunyuan_dir)
             progress("generating_3d", "3D model generated", 55)
 
             # ── 5. Upload 3D model ─────────────────────────────────────────
@@ -336,7 +343,12 @@ def main():
                         help="GPU model label shown in the Workers page")
     parser.add_argument("--poll-interval", type=float, default=POLL_INTERVAL,
                         help="Seconds between job polls when idle")
+    parser.add_argument("--hunyuan-dir", default=None,
+                        help="Path to Hunyuan3D-2 repo (default: ../Hunyuan3D-2 relative to worker/)")
     args = parser.parse_args()
+
+    hunyuan_dir = Path(args.hunyuan_dir) if args.hunyuan_dir else None
+    api_base = args.api_url
 
     api = StudioAPI(args.api_url)
 
@@ -368,7 +380,8 @@ def main():
         while True:
             job = api.get_next_job()
             if job:
-                process_job(api, job, worker_id)
+                process_job(api, job, worker_id,
+                            hunyuan_dir=hunyuan_dir, api_base=api_base)
             else:
                 time.sleep(args.poll_interval)
     except KeyboardInterrupt:
