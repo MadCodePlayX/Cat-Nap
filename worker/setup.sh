@@ -17,15 +17,22 @@ echo ""
 
 # ── 1. Python env ─────────────────────────────────────────
 echo "[1/5] Creating Python virtual environment ..."
-python3 -m venv "$SCRIPT_DIR/.venv"
+# --system-site-packages: inherit system torch/CUDA — avoids re-downloading on RunPod
+python3 -m venv --system-site-packages "$SCRIPT_DIR/.venv"
 source "$SCRIPT_DIR/.venv/bin/activate"
 
-#pip install --upgrade pip wheel
-#pip install -r "$SCRIPT_DIR/requirements.txt"
+pip install --upgrade pip wheel --quiet
 
-# Install PyTorch with CUDA 12.4 support for RTX 5090
-#pip install torch torchvision torchaudio \
-#  --index-url https://download.pytorch.org/whl/cu124
+# Skip torch reinstall if already present with CUDA (common on RunPod)
+if python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+  echo "      PyTorch with CUDA already available — skipping torch install ✓"
+  pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+else
+  echo "      Installing PyTorch with CUDA 12.4 ..."
+  pip install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124 --quiet
+  pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+fi
 
 echo "      Python env ready ✓"
 
