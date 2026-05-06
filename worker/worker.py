@@ -301,10 +301,11 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
                                hunyuan_dir=hunyuan_dir)
             progress("generating_3d", "3D model generated", 55)
 
-            # ── 5. Upload 3D model ─────────────────────────────────────────
-            model_url = api.upload_file(job_id, "model", model_glb)
-            progress("compositing", "Compositing scene in Blender", 60,
-                     modelUrl=model_url)
+            # ── 5. Skip GLB upload — Blender reads it locally ─────────────
+            # The Replit proxy enforces a hard request-body size limit.
+            # The GLB is already on disk; Blender reads it from the local path.
+            model_url = None
+            progress("compositing", "Compositing scene in Blender", 60)
 
             # ── 6. Blender: compose scene + render video ───────────────────
             output_video = tmp / "output.mp4"
@@ -315,8 +316,29 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
 
             progress("rendering_video", "Encoding video", 90)
 
-            # ── 7. Upload outputs ──────────────────────────────────────────
-            video_url = api.upload_file(job_id, "video", output_video)
+            # ── 7. Compress video with ffmpeg before upload ────────────────
+            # Blender renders uncompressed or losslessly — compress to H264
+            # so the file stays small enough to pass through the Replit proxy.
+            compressed_video = tmp / "output_compressed.mp4"
+            ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+            ffmpeg_cmd = [
+                ffmpeg_bin, "-y", "-i", str(output_video),
+                "-vcodec", "libx264", "-crf", "23",
+                "-preset", "fast", "-vf", "scale=-2:720",
+                "-movflags", "+faststart",
+                str(compressed_video),
+            ]
+            ffmpeg_result = subprocess.run(
+                ffmpeg_cmd, capture_output=True, text=True, timeout=300)
+            if ffmpeg_result.returncode == 0 and compressed_video.exists():
+                upload_video = compressed_video
+                print(f"      Video compressed: {compressed_video.stat().st_size // 1024} KB")
+            else:
+                upload_video = output_video  # fall back to original
+                print(f"      ⚠ ffmpeg compression failed, uploading original")
+
+            # ── 8. Upload outputs ──────────────────────────────────────────
+            video_url = api.upload_file(job_id, "video", upload_video)
             thumb_url = api.upload_file(job_id, "thumbnail", output_thumb)
 
             # ── 8. Mark complete ───────────────────────────────────────────
