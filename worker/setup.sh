@@ -34,6 +34,15 @@ else
   pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
 fi
 
+# nvdiffrast — CUDA rasterizer used by the custom_rasterizer shim for texturing
+if ! python3 -c "import nvdiffrast" 2>/dev/null; then
+  echo "      Installing nvdiffrast (CUDA rasterizer for texture painting) ..."
+  pip install nvdiffrast --quiet
+  echo "      nvdiffrast installed ✓"
+else
+  echo "      nvdiffrast already installed ✓"
+fi
+
 echo "      Python env ready ✓"
 
 # ── 2. Hunyuan3D-2 ────────────────────────────────────────
