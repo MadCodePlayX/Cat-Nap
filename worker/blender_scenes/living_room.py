@@ -85,8 +85,19 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     # ── Render settings ───────────────────────────────────────────────────────
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
-    scene.cycles.device = "GPU"
     scene.cycles.samples = 128
+    _cprefs = bpy.context.preferences.addons['cycles'].preferences
+    for _dtype in ('OPTIX', 'CUDA'):
+        try:
+            _cprefs.compute_device_type = _dtype
+            _cprefs.get_devices()
+            for _dev in _cprefs.devices:
+                _dev.use = True
+            print(f"Cycles GPU backend: {_dtype} ✓")
+            break
+        except Exception:
+            continue
+    scene.cycles.device = 'GPU'
     scene.render.resolution_x = 1920
     scene.render.resolution_y = 1080
     scene.render.fps = 24
