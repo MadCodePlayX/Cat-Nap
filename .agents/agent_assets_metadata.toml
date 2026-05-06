@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "lA9qWcnDwoOepdo1GA9tP"
+uri = "file://3d-product-studio.zip"
+type = "unspecified"
+title = "3D Product Studio — Complete Source Code"
