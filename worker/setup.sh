@@ -20,12 +20,12 @@ echo "[1/5] Creating Python virtual environment ..."
 python3 -m venv "$SCRIPT_DIR/.venv"
 source "$SCRIPT_DIR/.venv/bin/activate"
 
-pip install --upgrade pip wheel
-pip install -r "$SCRIPT_DIR/requirements.txt"
+#pip install --upgrade pip wheel
+#pip install -r "$SCRIPT_DIR/requirements.txt"
 
 # Install PyTorch with CUDA 12.4 support for RTX 5090
-pip install torch torchvision torchaudio \
-  --index-url https://download.pytorch.org/whl/cu124
+#pip install torch torchvision torchaudio \
+#  --index-url https://download.pytorch.org/whl/cu124
 
 echo "      Python env ready ✓"
 
