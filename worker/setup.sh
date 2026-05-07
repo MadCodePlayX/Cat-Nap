@@ -48,10 +48,15 @@ python3 -m venv --system-site-packages "$VENV"
 # torch + torchvision MUST come from the CUDA wheel index together.
 # Installing torchvision from PyPI gives a CPU-only build which causes
 # "operator torchvision::nms does not exist" at runtime.
-echo "      Installing torch + torchvision (CUDA 12.4 index) ..."
-"$PIP" install torch torchvision torchaudio \
+# Pin exact stable versions — torchvision==0.21.0 requires torch==2.6.0 exactly.
+# Without pinning, pip may pull a nightly (e.g. 2.11.0) causing version conflicts.
+echo "      Installing torch==2.6.0 + torchvision==0.21.0 (CUDA 12.4) ..."
+"$PIP" install \
+  "torch==2.6.0+cu124" \
+  "torchvision==0.21.0+cu124" \
+  "torchaudio==2.6.0+cu124" \
   --index-url https://download.pytorch.org/whl/cu124 --quiet
-echo "      torch + torchvision (CUDA) ✓"
+echo "      torch 2.6.0 + torchvision 0.21.0 (CUDA) ✓"
 
 # ── Python packages ───────────────────────────────────────
 echo "      Installing Python packages ..."
@@ -72,9 +77,9 @@ echo "      Installing rembg[gpu] + onnxruntime-gpu ..."
 if ! "$PY" -c "import nvdiffrast" 2>/dev/null; then
   echo "      Installing nvdiffrast from source (needs CUDA toolkit + gcc) ..."
   "$PIP" install git+https://github.com/NVlabs/nvdiffrast.git \
-    --no-build-isolation --quiet \
+    --no-build-isolation --quiet 2>/dev/null \
     && echo "      nvdiffrast installed ✓" \
-    || echo "      ⚠ nvdiffrast failed — texturing will use fallback materials"
+    || echo "      ⚠ nvdiffrast skipped (needs CUDA toolkit + gcc) — texturing uses fallback materials"
 else
   echo "      nvdiffrast already available ✓"
 fi
