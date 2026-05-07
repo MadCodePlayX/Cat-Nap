@@ -263,6 +263,17 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
             return _orig_fp(cls, *args, **kwargs)
         _DP.from_pretrained = _patched_fp
 
+        # hy3dgen sometimes produces textures as (1,1,H,W,C) numpy arrays which
+        # PIL.fromarray can't handle. Patch it to squeeze extra dims first.
+        from PIL import Image as _PILPatch
+        _orig_fromarray = _PILPatch.fromarray
+        def _safe_fromarray(obj, mode=None):
+            import numpy as np
+            if hasattr(obj, "shape") and obj.ndim > 3:
+                obj = obj.squeeze()
+            return _orig_fromarray(obj, mode)
+        _PILPatch.fromarray = _safe_fromarray
+
         if TEXTURE_PIPELINE is None:
             print("      Loading texture pipeline (first run only) ...")
             TEXTURE_PIPELINE = Hunyuan3DPaintPipeline.from_pretrained(
@@ -332,9 +343,13 @@ def render_scene(
             "Blender not found on PATH. Install Blender 4.x and add it to PATH."
         )
 
+    # --cycles-device forces GPU at the CLI level — more reliable than setting
+    # it inside the Python script, especially in headless/WSL2 environments.
+    # Try OptiX first (RTX hardware denoiser), fall back to CUDA.
     cmd = [
         blender_bin,
         "--background",
+        "--cycles-device", "OPTIX",
         "--python", str(scene_script),
         "--",
         str(model_glb),
