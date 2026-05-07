@@ -294,12 +294,9 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
         print("      Painting texture ...")
         _t1 = time.time()
-        # num_inference_steps=10 (vs default 20) halves CPU+GPU iterations
-        # with minimal quality difference on the turbo model variant
-        _tex_kwargs: dict = {"num_inference_steps": 10}
         with _tqdm_progress(31, 54, "Texture paint"), \
              torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
-            mesh = TEXTURE_PIPELINE(mesh, image=image, **_tex_kwargs)
+            mesh = TEXTURE_PIPELINE(mesh, image=image)
         print(f"      Texture done in {time.time() - _t1:.1f}s")
         print("      Texture applied ✓")
 
@@ -352,13 +349,11 @@ def render_scene(
             "Blender not found on PATH. Install Blender 4.x and add it to PATH."
         )
 
-    # --cycles-device forces GPU at the CLI level — more reliable than setting
-    # it inside the Python script, especially in headless/WSL2 environments.
-    # Try OptiX first (RTX hardware denoiser), fall back to CUDA.
+    # GPU device is configured inside each scene script via
+    # bpy.context.preferences.addons['cycles'].preferences
     cmd = [
         blender_bin,
         "--background",
-        "--cycles-device", "OPTIX",
         "--python", str(scene_script),
         "--",
         str(model_glb),
