@@ -229,7 +229,7 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
             _last_fire[0] = now
             frac = min(self.n / self.total, 1.0)
             pct = int(pct_start + frac * (pct_end - pct_start))
-            elapsed = max(now - self.start_t, 0.001)
+            elapsed = max(now - getattr(self, "start_t", now - 0.001), 0.001)
             remaining = (self.total - self.n) * (elapsed / max(self.n, 1))
             eta_str = f"ETA {int(remaining)}s" if remaining > 1 else "finishing…"
             on_progress(pct, f"{label} — step {self.n}/{self.total} ({eta_str})")
