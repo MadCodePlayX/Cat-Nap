@@ -54,8 +54,24 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     if not _imported:
         print(f"[ERROR] GLB import returned 0 objects — bad path or corrupt file: {model_glb_path}")
         sys.exit(1)
-    for obj in _imported:
-        obj.location = (0.8, -0.5, 0.0)
+    # Centre and scale product to 0.5 m tall, placed on floor at target XY
+    import mathutils as _mu
+    _min_b = _mu.Vector((1e9, 1e9, 1e9))
+    _max_b = _mu.Vector((-1e9, -1e9, -1e9))
+    for _obj in _imported:
+        for _c in _obj.bound_box:
+            _wc = _obj.matrix_world @ _mu.Vector(_c)
+            for _i in range(3):
+                _min_b[_i] = min(_min_b[_i], _wc[_i])
+                _max_b[_i] = max(_max_b[_i], _wc[_i])
+    _height = max(_max_b.z - _min_b.z, 0.01)
+    _scale = 0.5 / _height
+    _cx = (_min_b.x + _max_b.x) / 2
+    _cy = (_min_b.y + _max_b.y) / 2
+    for _obj in _imported:
+        _obj.scale = (_scale, _scale, _scale)
+        _obj.location = (0.8 - _cx * _scale, -0.5 - _cy * _scale, -_min_b.z * _scale)
+    print(f"  [scene] Product: {len(_imported)} obj, h={_height:.3f}m -> {_height*_scale:.2f}m after scale")
 
     # Lights
     bpy.ops.object.light_add(type="AREA", location=(0, 0, 3.5))
