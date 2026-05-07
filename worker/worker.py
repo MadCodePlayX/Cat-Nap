@@ -274,9 +274,12 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
         print("      Painting texture ...")
         _t1 = time.time()
+        # num_inference_steps=10 (vs default 20) halves CPU+GPU iterations
+        # with minimal quality difference on the turbo model variant
+        _tex_kwargs: dict = {"num_inference_steps": 10}
         with _tqdm_progress(31, 54, "Texture paint"), \
              torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
-            mesh = TEXTURE_PIPELINE(mesh, image=image)
+            mesh = TEXTURE_PIPELINE(mesh, image=image, **_tex_kwargs)
         print(f"      Texture done in {time.time() - _t1:.1f}s")
         print("      Texture applied ✓")
 
