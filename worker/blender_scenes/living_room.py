@@ -57,6 +57,9 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     # ── Import product model ───────────────────────────────────────────────────
     bpy.ops.import_scene.gltf(filepath=model_glb_path)
     product_objs = [o for o in bpy.context.selected_objects]
+    if not product_objs:
+        print(f"[ERROR] GLB import returned 0 objects — bad path or corrupt file: {model_glb_path}")
+        sys.exit(1)
 
     # Centre and scale product to ~0.5m tall
     for obj in product_objs:
