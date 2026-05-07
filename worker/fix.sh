@@ -40,19 +40,23 @@ echo ""
 echo "[2] Creating clean venv ..."
 python3 -m venv "$VENV"
 "$PIP" install --upgrade pip wheel --quiet
+
+# Clear corrupted pip cache (causes "Cache entry deserialization failed" spam)
+"$PIP" cache purge 2>/dev/null || true
 echo "    Clean venv created ✓"
 
 # ── torch + torchvision pinned together from CUDA index ───
-# MUST be installed together and from the CUDA index.
-# torch==2.6.0 + torchvision==0.21.0 are the matching stable cu124 builds.
-# Never install torchvision from PyPI — it ships without CUDA ops.
+# NOTE: Do NOT use "==2.6.0+cu124" — pip resolves the +cu124 local version
+# from the index automatically. Specifying it explicitly causes "no versions found".
+# MUST use --no-cache-dir to bypass any stale/corrupted cache entries.
 echo ""
 echo "[3] Installing torch 2.6.0 + torchvision 0.21.0 (CUDA 12.4) ..."
 "$PIP" install \
-  "torch==2.6.0+cu124" \
-  "torchvision==0.21.0+cu124" \
-  "torchaudio==2.6.0+cu124" \
+  "torch==2.6.0" \
+  "torchvision==0.21.0" \
+  "torchaudio==2.6.0" \
   --index-url https://download.pytorch.org/whl/cu124 \
+  --no-cache-dir \
   --quiet
 echo "    torch + torchvision (CUDA) installed ✓"
 
