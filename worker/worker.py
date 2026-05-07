@@ -221,6 +221,25 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
             "tencent/Hunyuan3D-2",
         )
+        # Move all submodels to GPU — from_pretrained defaults to CPU
+        try:
+            pipeline_texgen.to("cuda")
+            print("      Texture pipeline → CUDA ✓")
+        except Exception as _e:
+            print(f"      ⚠ .to('cuda') failed ({_e}), trying per-component move")
+            for _attr in ("unet", "vae", "text_encoder", "multiview_model"):
+                _sub = getattr(pipeline_texgen, _attr, None)
+                if _sub is not None:
+                    try:
+                        _sub.to("cuda")
+                    except Exception:
+                        pass
+        # fp16 — halves VRAM and speeds up inference
+        try:
+            pipeline_texgen.to(_torch.float16)
+            print("      Texture pipeline → fp16 ✓")
+        except Exception as _e:
+            print(f"      ⚠ fp16 cast failed ({_e}), staying in fp32")
         print("      Painting texture ...")
         mesh = pipeline_texgen(mesh, image=image)
         print("      Texture applied ✓")
