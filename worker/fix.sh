@@ -45,20 +45,29 @@ python3 -m venv "$VENV"
 "$PIP" cache purge 2>/dev/null || true
 echo "    Clean venv created ✓"
 
-# ── torch + torchvision pinned together from CUDA index ───
-# NOTE: Do NOT use "==2.6.0+cu124" — pip resolves the +cu124 local version
-# from the index automatically. Specifying it explicitly causes "no versions found".
-# MUST use --no-cache-dir to bypass any stale/corrupted cache entries.
+# ── torch + torchvision from CUDA index ───────────────────
+# Install all three together from the CUDA index in one command — this
+# guarantees pip picks mutually compatible versions. No version pinning
+# needed since all wheels come from the same index.
 echo ""
-echo "[3] Installing torch 2.6.0 + torchvision 0.21.0 (CUDA 12.4) ..."
-"$PIP" install \
-  "torch==2.6.0" \
-  "torchvision==0.21.0" \
-  "torchaudio==2.6.0" \
-  --index-url https://download.pytorch.org/whl/cu124 \
-  --no-cache-dir \
-  --quiet
-echo "    torch + torchvision (CUDA) installed ✓"
+echo "[3] Installing torch + torchvision + torchaudio (CUDA 12.4) ..."
+echo "    (this downloads ~2.5GB — may take several minutes)"
+
+# Test connectivity first
+if ! curl -sf --max-time 10 "https://download.pytorch.org/whl/cu124/" -o /dev/null; then
+  echo "    ⚠ Cannot reach download.pytorch.org — trying without --index-url ..."
+  # Fallback: try PyPI torch (CPU-only, better than nothing for debugging)
+  "$PIP" install torch torchvision torchaudio --no-cache-dir --quiet \
+    && echo "    ⚠ Installed CPU-only torch (no CUDA index available)" \
+    || echo "    ✗ torch install failed — check your internet connection"
+else
+  "$PIP" install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124 \
+    --no-cache-dir \
+    --quiet \
+    && echo "    torch + torchvision (CUDA) installed ✓" \
+    || echo "    ✗ torch install failed — check output above"
+fi
 
 # Verify CUDA is available
 "$PY" -c "
