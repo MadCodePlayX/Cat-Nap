@@ -349,6 +349,25 @@ def render_scene(
             "Blender not found on PATH. Install Blender 4.x and add it to PATH."
         )
 
+    # ── Free VRAM held by Hunyuan pipelines so Blender Cycles has room ────────
+    # Cached pipelines pin ~13 GB on a 16 GB card; without releasing them,
+    # Cycles fails to allocate its device buffer and silently falls back to CPU.
+    try:
+        import gc
+        import torch
+        global SHAPE_PIPELINE, TEXTURE_PIPELINE
+        if SHAPE_PIPELINE is not None or TEXTURE_PIPELINE is not None:
+            SHAPE_PIPELINE = None
+            TEXTURE_PIPELINE = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            free, total = torch.cuda.mem_get_info()
+            print(f"      [render] Released Hunyuan VRAM — "
+                  f"free {free/1024**3:.1f} / {total/1024**3:.1f} GB")
+    except Exception as _e:
+        print(f"      [render] VRAM release skipped: {_e}")
+
     # GPU device is configured inside each scene script via
     # bpy.context.preferences.addons['cycles'].preferences
     cmd = [
@@ -378,12 +397,26 @@ def render_scene(
         cmd, capture_output=True, text=True, timeout=1800, env=blender_env
     )
 
-    # Always surface GPU/diagnostic lines from the scene script, plus the
-    # tail of Blender's own log so renderer/device choice is visible.
-    interesting_prefixes = ("  [GPU]", "Cycles", "CUDA ", "OptiX", "Device:", "Rendered ")
+    # Surface GPU/diagnostic + any error/warning lines so we can tell whether
+    # Cycles really used the GPU. Match is case-insensitive on substrings,
+    # not just prefixes, to catch e.g. "CUDA error: out of memory".
+    needles = (
+        "[gpu]", "cycles", "cuda", "optix", "device:", "rendered ",
+        "fall", "error", "warning", "fail",
+    )
+    seen = set()
     for line in result.stdout.splitlines():
-        if any(line.lstrip().startswith(p.lstrip()) for p in interesting_prefixes):
-            print(f"      [blender] {line}")
+        low = line.lower()
+        if any(n in low for n in needles):
+            if line not in seen:
+                print(f"      [blender] {line}")
+                seen.add(line)
+    for line in result.stderr.splitlines():
+        low = line.lower()
+        if any(n in low for n in needles):
+            if line not in seen:
+                print(f"      [blender:err] {line}")
+                seen.add(line)
     if result.returncode != 0:
         raise RuntimeError(
             f"Blender render failed:\n--- stdout (tail) ---\n{result.stdout[-2000:]}\n"
