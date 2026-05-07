@@ -26,6 +26,12 @@ import tempfile
 import time
 from pathlib import Path
 
+# Ensure ~/.local/bin is on PATH so blender installed by setup.sh is findable
+# regardless of how the worker was launched (with or without source activate)
+_local_bin = str(Path.home() / ".local" / "bin")
+if _local_bin not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _local_bin + os.pathsep + os.environ.get("PATH", "")
+
 import requests
 from PIL import Image
 
