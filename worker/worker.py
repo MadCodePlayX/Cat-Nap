@@ -52,6 +52,10 @@ HEARTBEAT_INTERVAL = 15   # seconds
 POLL_INTERVAL = 3         # seconds between job polls
 MAX_IMAGE_SIZE = 1024     # px, resize inputs before 3D gen
 
+# ── Pipeline cache — stay loaded in VRAM across jobs ───────────────────────────
+SHAPE_PIPELINE = None
+TEXTURE_PIPELINE = None
+
 
 # ── API client ─────────────────────────────────────────────────────────────────
 class StudioAPI:
@@ -152,13 +156,25 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     """
     Run Hunyuan3D-2 inference to generate a .glb from a single image.
     Uses the hy3dgen Python API directly (no infer.py subprocess).
+    Pipelines are cached globally so they stay in VRAM across jobs.
     hunyuan_dir defaults to worker/../Hunyuan3D-2/ (set by setup.sh).
     Override with --hunyuan-dir if you cloned it elsewhere (e.g. network volume).
     """
+    import torch
+
+    # ── GPU optimisation ───────────────────────────────────────────────────────
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+    if torch.cuda.is_available():
+        torch.set_float32_matmul_precision("high")
+
+    global SHAPE_PIPELINE, TEXTURE_PIPELINE
+
     if hunyuan_dir is None:
         hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2"
 
-    # Validate the repo is present
+    # Validate repo
     if not (hunyuan_dir / "hy3dgen").exists():
         raise RuntimeError(
             f"Hunyuan3D-2 not found at {hunyuan_dir}.\n"
@@ -166,49 +182,51 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
             f"{hunyuan_dir} && pip install -e {hunyuan_dir}"
         )
 
-    # Add Hunyuan3D-2 to path so hy3dgen imports work
+    # Add paths
     if str(hunyuan_dir) not in sys.path:
         sys.path.insert(0, str(hunyuan_dir))
-    # Also add differentiable_renderer dir so custom_rasterizer.so is findable
     dr_path = str(hunyuan_dir / "hy3dgen" / "texgen" / "differentiable_renderer")
     if dr_path not in sys.path:
         sys.path.insert(0, dr_path)
+    # Make worker/custom_rasterizer.py importable
+    if str(WORKER_DIR) not in sys.path:
+        sys.path.insert(0, str(WORKER_DIR))
 
     from PIL import Image as PILImage
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
     from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-    # Make worker/custom_rasterizer.py importable (provides rasterize/interpolate
-    # that mesh_render.py expects from 'custom_rasterizer')
-    if str(WORKER_DIR) not in sys.path:
-        sys.path.insert(0, str(WORKER_DIR))
-
     work_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load image — must be RGBA with background removed
     image = PILImage.open(image_path).convert("RGBA")
 
-    import torch as _torch
+    torch.cuda.empty_cache()
+    print(f"      GPU: {torch.cuda.get_device_name(0)}")
+    print(f"      Total VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
 
-    # Shape generation (image → 3D mesh)
-    print("      Loading shape pipeline ...")
-    pipeline_shapegen = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        "tencent/Hunyuan3D-2",
-        device="cuda",
-        torch_dtype=_torch.float16,   # fp16: 2x faster, half VRAM
-    )
+    # ── Shape pipeline (cached in VRAM) ────────────────────────────────────────
+    if SHAPE_PIPELINE is None:
+        print("      Loading shape pipeline (first run only) ...")
+        SHAPE_PIPELINE = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+            "tencent/Hunyuan3D-2",
+            device="cuda",
+        )
+        if hasattr(SHAPE_PIPELINE, "model"):
+            SHAPE_PIPELINE.model = SHAPE_PIPELINE.model.to(
+                device="cuda", memory_format=torch.channels_last
+            )
+        print("      Shape pipeline cached in VRAM ✓")
+
     print("      Generating 3D mesh ...")
-    mesh = pipeline_shapegen(image=image)[0]
+    _t0 = time.time()
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        mesh = SHAPE_PIPELINE(image=image)[0]
+    print(f"      Shape done in {time.time() - _t0:.1f}s  |  "
+          f"VRAM {torch.cuda.memory_allocated()/1024**3:.2f} GB allocated")
 
-    # Free VRAM before loading the texture pipeline (both are large models)
-    del pipeline_shapegen
-    _torch.cuda.empty_cache()
-
-    # Texture generation — paints the mesh using multiview diffusion
+    # ── Texture pipeline (cached in VRAM) ──────────────────────────────────────
     try:
-        # hy3dgen's multiview_utils.py calls DiffusionPipeline.from_pretrained()
-        # with custom pipeline code but without trust_remote_code=True.
-        # Monkey-patch to inject it so the hunyuanpaint pipeline loads correctly.
+        # hy3dgen calls DiffusionPipeline.from_pretrained() internally without
+        # trust_remote_code=True — monkey-patch once to inject it.
         from diffusers import DiffusionPipeline as _DP
         _orig_fp = _DP.from_pretrained.__func__
         @classmethod  # type: ignore[misc]
@@ -217,37 +235,27 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
             return _orig_fp(cls, *args, **kwargs)
         _DP.from_pretrained = _patched_fp
 
-        print("      Loading texture pipeline ...")
-        pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
-            "tencent/Hunyuan3D-2",
-        )
-        # Move all submodels to GPU — from_pretrained defaults to CPU
-        try:
-            pipeline_texgen.to("cuda")
-            print("      Texture pipeline → CUDA ✓")
-        except Exception as _e:
-            print(f"      ⚠ .to('cuda') failed ({_e}), trying per-component move")
-            for _attr in ("unet", "vae", "text_encoder", "multiview_model"):
-                _sub = getattr(pipeline_texgen, _attr, None)
-                if _sub is not None:
-                    try:
-                        _sub.to("cuda")
-                    except Exception:
-                        pass
-        # fp16 — halves VRAM and speeds up inference
-        try:
-            pipeline_texgen.to(_torch.float16)
-            print("      Texture pipeline → fp16 ✓")
-        except Exception as _e:
-            print(f"      ⚠ fp16 cast failed ({_e}), staying in fp32")
-        print("      Painting texture ...")
-        mesh = pipeline_texgen(mesh, image=image)
-        print("      Texture applied ✓")
-    except (ModuleNotFoundError, ImportError, AttributeError) as e:
-        print(f"      ⚠ Texture skipped ({type(e).__name__}: {e})")
-        print("      Blender will apply its own materials in the scene step.")
+        if TEXTURE_PIPELINE is None:
+            print("      Loading texture pipeline (first run only) ...")
+            TEXTURE_PIPELINE = Hunyuan3DPaintPipeline.from_pretrained(
+                "tencent/Hunyuan3D-2",
+            )
+            if hasattr(TEXTURE_PIPELINE, "to"):
+                TEXTURE_PIPELINE = TEXTURE_PIPELINE.to("cuda")
+            print("      Texture pipeline cached in VRAM ✓")
 
-    # Export as GLB
+        print("      Painting texture ...")
+        _t1 = time.time()
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+            mesh = TEXTURE_PIPELINE(mesh, image=image)
+        print(f"      Texture done in {time.time() - _t1:.1f}s")
+        print("      Texture applied ✓")
+
+    except Exception as e:
+        print(f"      ⚠ Texture skipped ({type(e).__name__}: {e})")
+        print("      Blender materials will be used instead.")
+
+    # ── Export ─────────────────────────────────────────────────────────────────
     generated = work_dir / "model.glb"
     mesh.export(str(generated))
 
@@ -255,6 +263,7 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         raise RuntimeError(f"Hunyuan3D-2 export failed — GLB not found at {generated}")
 
     shutil.copy(generated, output_glb)
+    torch.cuda.empty_cache()
     return output_glb
 
 
