@@ -379,10 +379,10 @@ def render_scene(
         "--background",
         "--python", str(scene_script),
         "--",
-        str(model_glb),
+        model_glb.as_posix(),      # forward slashes — Blender cross-platform
         animal_type,
-        str(output_video),
-        str(output_thumbnail),
+        output_video.as_posix(),   # forward slashes
+        output_thumbnail.as_posix(),
     ]
 
     # Ensure Blender can find NVIDIA libs when running under WSL.
@@ -497,10 +497,14 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
                                hunyuan_dir=hunyuan_dir, on_progress=_on_3d_progress)
             progress("generating_3d", "3D model generated", 55)
 
-            # ── 5. Skip GLB upload — Blender reads it locally ─────────────
-            # The Replit proxy enforces a hard request-body size limit.
-            # The GLB is already on disk; Blender reads it from the local path.
-            model_url = None
+            # ── 5. Upload GLB model ──────────────────────────────────────────
+            progress("compositing", "Uploading 3D model", 57)
+            try:
+                model_url = api.upload_file(job_id, "glb", model_glb)
+                print(f"      GLB uploaded ✓")
+            except Exception as _glb_e:
+                model_url = None
+                print(f"      ⚠ GLB upload failed ({_glb_e}) — 3D viewer unavailable")
             progress("compositing", "Compositing scene in Blender", 60)
 
             # ── 6. Blender: compose scene + render PNG frame sequence ──────
@@ -517,7 +521,7 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
 
             # ── 7. Encode PNG frame sequence → MP4 with ffmpeg ────────────
             _ffmpeg = ffmpeg_bin or shutil.which("ffmpeg") or "ffmpeg"
-            frame_pattern = str(frames_dir / "frame_%04d.png")
+            frame_pattern = frames_dir.as_posix() + "/frame_%04d.png"
             ffmpeg_cmd = [
                 _ffmpeg, "-y",
                 "-framerate", "24",
