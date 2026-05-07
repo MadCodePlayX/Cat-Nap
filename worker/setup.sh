@@ -60,6 +60,7 @@ else
 fi
 
 echo "      Installing Hunyuan3D-2 dependencies ..."
+pip install huggingface_hub --upgrade --quiet
 pip install -e "$HUNYUAN_DIR"
 
 # Download model weights (first run only — ~7GB)
