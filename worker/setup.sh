@@ -38,7 +38,7 @@ fi
 # Not on PyPI — install from GitHub source (requires CUDA toolkit + C++ compiler)
 if ! python3 -c "import nvdiffrast" 2>/dev/null; then
   echo "      Installing nvdiffrast from source (needs CUDA toolkit) ..."
-  pip install git+https://github.com/NVlabs/nvdiffrast.git --quiet
+  pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation --quiet
   echo "      nvdiffrast installed ✓"
 else
   echo "      nvdiffrast already available ✓"
