@@ -73,7 +73,6 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
 
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
-    scene.cycles.samples = 128
     _cprefs = bpy.context.preferences.addons['cycles'].preferences
     _chosen_backend = None
     for _dtype in ('OPTIX', 'CUDA', 'HIP', 'METAL', 'ONEAPI'):
