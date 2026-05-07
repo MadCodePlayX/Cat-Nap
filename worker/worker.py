@@ -337,17 +337,21 @@ def render_scene(
     animal_type: str,
     output_video: Path,
     output_thumbnail: Path,
+    blender_bin: str | None = None,
 ) -> None:
     scene_script = SCENES_DIR / f"{scene_type}.py"
     if not scene_script.exists():
         # Fall back to living_room if scene script missing
         scene_script = SCENES_DIR / "living_room.py"
 
-    blender_bin = shutil.which("blender")
+    if not blender_bin:
+        blender_bin = shutil.which("blender")
     if not blender_bin:
         raise RuntimeError(
-            "Blender not found on PATH. Install Blender 4.x and add it to PATH."
+            "Blender not found. Use --blender-path to specify the Blender executable, "
+            "e.g. --blender-path \"D:\\blender-5.1.1\\blender-5.1.1-windows-x64\\blender.exe\""
         )
+    print(f"      [render] Using Blender: {blender_bin}")
 
     # ── Free VRAM held by Hunyuan pipelines so Blender Cycles has room ────────
     # Cached pipelines pin ~13 GB on a 16 GB card; without releasing them,
@@ -436,7 +440,8 @@ def render_scene(
 
 # ── Job processor ──────────────────────────────────────────────────────────────
 def process_job(api: StudioAPI, job: dict, worker_id: int,
-                hunyuan_dir: Path | None = None, api_base: str = "") -> None:
+                hunyuan_dir: Path | None = None, api_base: str = "",
+                blender_bin: str | None = None) -> None:
     job_id = job["id"]
     product_id = job["productId"]
     scene_type = job["sceneType"]          # living_room | bedroom | balcony | garden | kitchen
@@ -502,7 +507,8 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
             output_thumb = tmp / "thumbnail.png"
 
             progress("rendering_video", f"Rendering {scene_type} scene", 65)
-            render_scene(model_glb, scene_type, animal_type, output_video, output_thumb)
+            render_scene(model_glb, scene_type, animal_type, output_video, output_thumb,
+                         blender_bin=blender_bin)
 
             progress("rendering_video", "Encoding video", 90)
 
@@ -581,9 +587,12 @@ def main():
                         help="Seconds between job polls when idle")
     parser.add_argument("--hunyuan-dir", default=None,
                         help="Path to Hunyuan3D-2 repo (default: ../Hunyuan3D-2 relative to worker/)")
+    parser.add_argument("--blender-path", default=None,
+                        help="Full path to blender executable, e.g. D:\\blender-5.1\\blender.exe")
     args = parser.parse_args()
 
     hunyuan_dir = Path(args.hunyuan_dir) if args.hunyuan_dir else None
+    blender_bin = args.blender_path or None
     api_base = args.api_url
 
     api = StudioAPI(args.api_url)
@@ -617,7 +626,8 @@ def main():
             job = api.get_next_job()
             if job:
                 process_job(api, job, worker_id,
-                            hunyuan_dir=hunyuan_dir, api_base=api_base)
+                            hunyuan_dir=hunyuan_dir, api_base=api_base,
+                            blender_bin=blender_bin)
             else:
                 time.sleep(args.poll_interval)
     except KeyboardInterrupt:
