@@ -98,6 +98,13 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
         except Exception:
             continue
     scene.cycles.device = 'GPU'
+    # OptiX denoiser: 64 samples + denoising ≈ 512 samples without, far faster
+    scene.cycles.use_denoising = True
+    try:
+        scene.cycles.denoiser = 'OPTIX'          # RTX GPU denoiser
+    except Exception:
+        scene.cycles.denoiser = 'OPENIMAGEDENOISE'  # CPU fallback
+    scene.cycles.samples = 64
     scene.render.resolution_x = 1920
     scene.render.resolution_y = 1080
     scene.render.fps = 24
