@@ -362,8 +362,18 @@ def render_scene(
         str(output_thumbnail),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+
+    # Always surface GPU/diagnostic lines from the scene script, plus the
+    # tail of Blender's own log so renderer/device choice is visible.
+    interesting_prefixes = ("  [GPU]", "Cycles", "CUDA ", "OptiX", "Device:", "Rendered ")
+    for line in result.stdout.splitlines():
+        if any(line.lstrip().startswith(p.lstrip()) for p in interesting_prefixes):
+            print(f"      [blender] {line}")
     if result.returncode != 0:
-        raise RuntimeError(f"Blender render failed:\n{result.stderr[-2000:]}")
+        raise RuntimeError(
+            f"Blender render failed:\n--- stdout (tail) ---\n{result.stdout[-2000:]}\n"
+            f"--- stderr (tail) ---\n{result.stderr[-2000:]}"
+        )
 
 
 # ── Job processor ──────────────────────────────────────────────────────────────
