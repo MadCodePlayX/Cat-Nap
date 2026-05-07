@@ -2,7 +2,7 @@ requests>=2.31.0
 Pillow>=10.0.0
 rembg[gpu]>=2.0.50
 numpy>=1.24.0
-torch>=2.1.0
+torch==2.6.0
 # torchvision intentionally omitted — must be installed from the CUDA wheel
 # index alongside torch (see setup.sh / fix.sh). PyPI build lacks CUDA ops.
 tqdm>=4.65.0
