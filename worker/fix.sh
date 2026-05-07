@@ -39,11 +39,16 @@ echo "[2/4] Installing / repairing Python packages ..."
 # torch + torchvision MUST come from the CUDA wheel index together.
 # Installing torchvision from PyPI gives a CPU-only build which causes
 # "operator torchvision::nms does not exist" at runtime.
-echo "      Installing torch + torchvision (CUDA 12.4 index) ..."
-"$PIP" install torch torchvision torchaudio \
+# Pin exact stable versions — torchvision==0.21.0 requires torch==2.6.0 exactly.
+# Without pinning, pip may pull a nightly (e.g. 2.11.0) causing version conflicts.
+echo "      Installing torch==2.6.0 + torchvision==0.21.0 (CUDA 12.4) ..."
+"$PIP" install \
+  "torch==2.6.0+cu124" \
+  "torchvision==0.21.0+cu124" \
+  "torchaudio==2.6.0+cu124" \
   --index-url https://download.pytorch.org/whl/cu124 \
   --force-reinstall --quiet
-echo "      torch + torchvision (CUDA) installed ✓"
+echo "      torch 2.6.0 + torchvision 0.21.0 (CUDA) installed ✓"
 
 "$PIP" install \
   "Pillow>=10.0.0" \
@@ -72,11 +77,11 @@ else
   echo "      ⚠ Hunyuan3D-2 not found at $HUNYUAN_DIR — run setup.sh first"
 fi
 
-# nvdiffrast (optional — CUDA texture baking)
+# nvdiffrast (optional — CUDA texture baking, needs CUDA toolkit + gcc)
 if ! "$PY" -c "import nvdiffrast" 2>/dev/null; then
-  echo "      Installing nvdiffrast from source ..."
+  echo "      Installing nvdiffrast from source (needs CUDA toolkit + gcc) ..."
   "$PIP" install git+https://github.com/NVlabs/nvdiffrast.git \
-    --no-build-isolation --quiet \
+    --no-build-isolation --quiet 2>/dev/null \
     && echo "      nvdiffrast installed ✓" \
     || echo "      ⚠ nvdiffrast failed — texturing will use fallback materials"
 else
