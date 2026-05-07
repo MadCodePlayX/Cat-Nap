@@ -220,7 +220,6 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         print("      Loading texture pipeline ...")
         pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
             "tencent/Hunyuan3D-2",
-            torch_dtype=_torch.float16,
         )
         print("      Painting texture ...")
         mesh = pipeline_texgen(mesh, image=image)
