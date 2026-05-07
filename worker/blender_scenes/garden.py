@@ -70,12 +70,12 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
             except Exception as _e:
                 print(f"  [GPU] {_dtype}: refresh_devices() failed: {_e}")
                 continue
-        _gpu_devs = [d for d in _cprefs.devices if d.type == _dtype]
+        _gpu_devs = [d for d in _cprefs.devices if d.type != 'CPU']
         if not _gpu_devs:
-            print(f"  [GPU] {_dtype}: no devices found")
+            print(f"  [GPU] {_dtype}: no non-CPU devices found")
             continue
         for _dev in _cprefs.devices:
-            _dev.use = (_dev.type == _dtype)
+            _dev.use = (_dev.type != 'CPU')
         _chosen_backend = _dtype
         print(f"  [GPU] Cycles backend: {_dtype} ✓ ({len(_gpu_devs)} device(s))")
         for _dev in _gpu_devs:

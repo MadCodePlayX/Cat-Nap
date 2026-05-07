@@ -361,7 +361,22 @@ def render_scene(
         str(output_video),
         str(output_thumbnail),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+
+    # Ensure Blender can find NVIDIA libs when running under WSL.
+    # WSL ships libcuda.so.1, libnvoptix_loader.so.1, etc. in /usr/lib/wsl/lib,
+    # but Blender's subprocess doesn't always pick them up via ldconfig alone.
+    # Prepending here is harmless on non-WSL systems (the dir simply won't exist).
+    blender_env = os.environ.copy()
+    wsl_lib = "/usr/lib/wsl/lib"
+    if Path(wsl_lib).is_dir():
+        existing = blender_env.get("LD_LIBRARY_PATH", "")
+        blender_env["LD_LIBRARY_PATH"] = (
+            f"{wsl_lib}:{existing}" if existing else wsl_lib
+        )
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=1800, env=blender_env
+    )
 
     # Always surface GPU/diagnostic lines from the scene script, plus the
     # tail of Blender's own log so renderer/device choice is visible.
