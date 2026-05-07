@@ -189,6 +189,17 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     # Texture generation — paints the mesh using multiview diffusion
     try:
+        # hy3dgen's multiview_utils.py calls DiffusionPipeline.from_pretrained()
+        # with custom pipeline code but without trust_remote_code=True.
+        # Monkey-patch to inject it so the hunyuanpaint pipeline loads correctly.
+        from diffusers import DiffusionPipeline as _DP
+        _orig_fp = _DP.from_pretrained.__func__
+        @classmethod  # type: ignore[misc]
+        def _patched_fp(cls, *args, **kwargs):
+            kwargs.setdefault("trust_remote_code", True)
+            return _orig_fp(cls, *args, **kwargs)
+        _DP.from_pretrained = _patched_fp
+
         print("      Loading texture pipeline ...")
         pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
             "tencent/Hunyuan3D-2",
