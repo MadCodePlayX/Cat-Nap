@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Callable, Optional
 
 # Ensure ~/.local/bin is on PATH so blender installed by setup.sh is findable
 # regardless of how the worker was launched (with or without source activate)
@@ -152,7 +153,8 @@ def prepare_image(src: Path, dest: Path, size: int = MAX_IMAGE_SIZE) -> Path:
 
 # ── 3D Generation: Hunyuan3D-2 ─────────────────────────────────────────────────
 def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
-                        hunyuan_dir: Path | None = None) -> Path:
+                        hunyuan_dir: Path | None = None,
+                        on_progress: Optional[Callable[[int, str], None]] = None) -> Path:
     """
     Run Hunyuan3D-2 inference to generate a .glb from a single image.
     Uses the hy3dgen Python API directly (no infer.py subprocess).
@@ -203,6 +205,31 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     print(f"      GPU: {torch.cuda.get_device_name(0)}")
     print(f"      Total VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
 
+    # ── tqdm progress hook ─────────────────────────────────────────────────────
+    import contextlib
+    import tqdm as _tqdm_mod
+
+    @contextlib.contextmanager
+    def _tqdm_progress(pct_start: int, pct_end: int, label: str):
+        """Patch tqdm.update so each diffusion step fires on_progress."""
+        if on_progress is None:
+            yield
+            return
+        _orig = _tqdm_mod.tqdm.update
+        def _hook(self, n: int = 1) -> None:
+            _orig(self, n)
+            if self.total and self.total > 0:
+                frac = min(self.n / self.total, 1.0)
+                pct = int(pct_start + frac * (pct_end - pct_start))
+                eta = (self.total - self.n) / (self.n / max(time.time() - self.start_t, 0.001))
+                eta_str = f"ETA {int(eta)}s" if eta > 1 else "finishing…"
+                on_progress(pct, f"{label} — step {self.n}/{self.total} ({eta_str})")
+        _tqdm_mod.tqdm.update = _hook
+        try:
+            yield
+        finally:
+            _tqdm_mod.tqdm.update = _orig
+
     # ── Shape pipeline (cached in VRAM) ────────────────────────────────────────
     if SHAPE_PIPELINE is None:
         print("      Loading shape pipeline (first run only) ...")
@@ -218,7 +245,8 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     print("      Generating 3D mesh ...")
     _t0 = time.time()
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+    with _tqdm_progress(16, 30, "Shape gen"), \
+         torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         mesh = SHAPE_PIPELINE(image=image)[0]
     print(f"      Shape done in {time.time() - _t0:.1f}s  |  "
           f"VRAM {torch.cuda.memory_allocated()/1024**3:.2f} GB allocated")
@@ -246,7 +274,8 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
         print("      Painting texture ...")
         _t1 = time.time()
-        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        with _tqdm_progress(31, 54, "Texture paint"), \
+             torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
             mesh = TEXTURE_PIPELINE(mesh, image=image)
         print(f"      Texture done in {time.time() - _t1:.1f}s")
         print("      Texture applied ✓")
@@ -364,8 +393,12 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
             # ── 4. Hunyuan3D-2: Image → 3D model ──────────────────────────
             progress("generating_3d", "Running Hunyuan3D-2 (3D generation)", 15)
             model_glb = tmp / "product_model.glb"
+
+            def _on_3d_progress(pct: int, stage: str) -> None:
+                progress("generating_3d", stage, pct)
+
             generate_3d_hunyuan(primary_image, model_glb, tmp / "hunyuan_out",
-                               hunyuan_dir=hunyuan_dir)
+                               hunyuan_dir=hunyuan_dir, on_progress=_on_3d_progress)
             progress("generating_3d", "3D model generated", 55)
 
             # ── 5. Skip GLB upload — Blender reads it locally ─────────────
