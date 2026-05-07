@@ -393,34 +393,44 @@ def render_scene(
             f"{wsl_lib}:{existing}" if existing else wsl_lib
         )
 
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=1800, env=blender_env
-    )
-
-    # Surface GPU/diagnostic + any error/warning lines so we can tell whether
-    # Cycles really used the GPU. Match is case-insensitive on substrings,
-    # not just prefixes, to catch e.g. "CUDA error: out of memory".
+    # Stream Blender output live — capture_output=True buffers until exit so
+    # GPU diagnostic lines are invisible if the worker is killed mid-render.
+    import threading
     needles = (
         "[gpu]", "cycles", "cuda", "optix", "device:", "rendered ",
         "fall", "error", "warning", "fail",
     )
-    seen = set()
-    for line in result.stdout.splitlines():
-        low = line.lower()
-        if any(n in low for n in needles):
-            if line not in seen:
-                print(f"      [blender] {line}")
+    seen: set = set()
+    stdout_lines: list = []
+    stderr_lines: list = []
+
+    def _drain(stream, store, prefix):
+        for raw in stream:
+            line = raw.rstrip()
+            store.append(line)
+            if any(n in line.lower() for n in needles) and line not in seen:
+                print(f"      {prefix} {line}", flush=True)
                 seen.add(line)
-    for line in result.stderr.splitlines():
-        low = line.lower()
-        if any(n in low for n in needles):
-            if line not in seen:
-                print(f"      [blender:err] {line}")
-                seen.add(line)
-    if result.returncode != 0:
+
+    with subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=blender_env
+    ) as proc:
+        t_out = threading.Thread(target=_drain, args=(proc.stdout, stdout_lines, "[blender]"))
+        t_err = threading.Thread(target=_drain, args=(proc.stderr, stderr_lines, "[blender:err]"))
+        t_out.start(); t_err.start()
+        try:
+            proc.wait(timeout=1800)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RuntimeError("Blender render timed out after 30 minutes")
+        finally:
+            t_out.join(); t_err.join()
+
+    if proc.returncode != 0:
         raise RuntimeError(
-            f"Blender render failed:\n--- stdout (tail) ---\n{result.stdout[-2000:]}\n"
-            f"--- stderr (tail) ---\n{result.stderr[-2000:]}"
+            "Blender render failed:\n--- stdout ---\n" + "\n".join(stdout_lines[-60:]) +
+            "\n--- stderr ---\n" + "\n".join(stderr_lines[-60:])
         )
 
 
