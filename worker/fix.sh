@@ -36,6 +36,15 @@ echo ""
 echo "[2/4] Installing / repairing Python packages ..."
 "$PIP" install --upgrade pip wheel --quiet
 
+# torch + torchvision MUST come from the CUDA wheel index together.
+# Installing torchvision from PyPI gives a CPU-only build which causes
+# "operator torchvision::nms does not exist" at runtime.
+echo "      Installing torch + torchvision (CUDA 12.4 index) ..."
+"$PIP" install torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu124 \
+  --force-reinstall --quiet
+echo "      torch + torchvision (CUDA) installed ✓"
+
 "$PIP" install \
   "Pillow>=10.0.0" \
   "requests>=2.31.0" \
