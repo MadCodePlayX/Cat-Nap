@@ -1,0 +1,9 @@
+# Force LF line endings for shell scripts and python so bash on Windows
+# (Git Bash / WSL) doesn't choke on CRLF (`$'\r': command not found`).
+*.sh        text eol=lf
+*.py        text eol=lf
+*.bash      text eol=lf
+Makefile    text eol=lf
+
+# Default: let git decide for everything else
+*           text=auto
