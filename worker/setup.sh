@@ -45,13 +45,13 @@ python3 -m venv --system-site-packages "$VENV"
 "$PIP" install --upgrade pip wheel --quiet
 
 # ── PyTorch ───────────────────────────────────────────────
-if "$PY" -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-  echo "      PyTorch with CUDA already available — skipping torch install ✓"
-else
-  echo "      Installing PyTorch with CUDA 12.4 ..."
-  "$PIP" install torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cu124 --quiet
-fi
+# torch + torchvision MUST come from the CUDA wheel index together.
+# Installing torchvision from PyPI gives a CPU-only build which causes
+# "operator torchvision::nms does not exist" at runtime.
+echo "      Installing torch + torchvision (CUDA 12.4 index) ..."
+"$PIP" install torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu124 --quiet
+echo "      torch + torchvision (CUDA) ✓"
 
 # ── Python packages ───────────────────────────────────────
 echo "      Installing Python packages ..."
