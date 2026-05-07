@@ -8,8 +8,12 @@ torch==2.6.0
 tqdm>=4.65.0
 huggingface-hub>=0.20.0
 trimesh>=4.0.0
-diffusers>=0.27.0
-transformers>=4.38.0
+# Hunyuan3D-2 paint pipeline is pinned against diffusers 0.30.x / transformers
+# 4.45.x. Newer versions reorganise the diffusers_modules cache layout, which
+# makes the dynamic UNet2p5DConditionModel load from the wrong path and crash
+# inside texture inference with "too many indices for tensor of dimension 3".
+diffusers>=0.30.0,<0.32.0
+transformers>=4.45.0,<4.50.0
 accelerate>=0.27.0
 einops>=0.7.0
 scipy>=1.11.0

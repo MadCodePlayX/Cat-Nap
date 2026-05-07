@@ -142,8 +142,8 @@ echo "[4] Installing remaining Python packages ..."
   "numpy>=1.24.0" \
   "tqdm>=4.65.0" \
   "trimesh>=4.0.0" \
-  "diffusers>=0.27.0" \
-  "transformers>=4.38.0" \
+  "diffusers>=0.30.0,<0.32.0" \
+  "transformers>=4.45.0,<4.50.0" \
   "accelerate>=0.27.0" \
   "einops>=0.7.0" \
   "scipy>=1.11.0" \

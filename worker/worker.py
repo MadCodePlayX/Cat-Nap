@@ -151,6 +151,47 @@ def prepare_image(src: Path, dest: Path, size: int = MAX_IMAGE_SIZE) -> Path:
     return dest
 
 
+# ── Texture fallback: dominant color baked as PBR base ────────────────────────
+def _apply_dominant_color_fallback(mesh, image_path: Path):
+    """When Hunyuan paint fails, sample the dominant non-transparent color from
+    the input image and apply it as a flat PBR base color on the mesh. This is
+    far better than the default pure-white that Blender otherwise renders."""
+    import numpy as np
+    from PIL import Image as _PIL
+    import trimesh
+    import trimesh.visual
+
+    img = _PIL.open(image_path).convert("RGBA").resize((128, 128), _PIL.LANCZOS)
+    arr = np.asarray(img)
+    rgb = arr[..., :3].astype(np.float32)
+    alpha = arr[..., 3].astype(np.float32) / 255.0
+    mask = alpha > 0.3
+    if mask.sum() < 32:
+        avg = rgb.reshape(-1, 3).mean(axis=0)
+    else:
+        avg = (rgb[mask]).mean(axis=0)
+    base = np.clip(avg, 0, 255).astype(np.uint8)
+    color_rgba = np.array([base[0], base[1], base[2], 255], dtype=np.uint8)
+
+    # Apply to whatever mesh-like object hy3dgen returned
+    meshes = mesh if isinstance(mesh, list) else [mesh]
+    for m in meshes:
+        try:
+            material = trimesh.visual.material.PBRMaterial(
+                baseColorFactor=color_rgba,
+                metallicFactor=0.0,
+                roughnessFactor=0.8,
+            )
+            m.visual = trimesh.visual.TextureVisuals(material=material)
+        except Exception:
+            try:
+                m.visual.face_colors = color_rgba
+            except Exception:
+                pass
+    print(f"      [fallback] Dominant color RGB=({base[0]},{base[1]},{base[2]})")
+    return mesh if isinstance(mesh, list) else meshes[0]
+
+
 # ── 3D Generation: Hunyuan3D-2 ─────────────────────────────────────────────────
 def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
                         hunyuan_dir: Path | None = None,
@@ -294,15 +335,27 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
         print("      Painting texture ...")
         _t1 = time.time()
-        with _tqdm_progress(31, 54, "Texture paint"), \
-             torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
-            mesh = TEXTURE_PIPELINE(mesh, image=image)
+        # NOTE: do NOT wrap the paint pipeline in torch.autocast — the multi-view
+        # UNet manages its own dtypes and autocast causes shape/index errors
+        # ("too many indices for tensor of dimension 3") on newer diffusers.
+        # The texture pipeline expects RGB; alpha is applied separately as a mask.
+        _tex_image = image.convert("RGB") if image.mode != "RGB" else image
+        with _tqdm_progress(31, 54, "Texture paint"), torch.inference_mode():
+            mesh = TEXTURE_PIPELINE(mesh, image=_tex_image)
         print(f"      Texture done in {time.time() - _t1:.1f}s")
         print("      Texture applied ✓")
 
     except Exception as e:
+        import traceback
         print(f"      ⚠ Texture skipped ({type(e).__name__}: {e})")
-        print("      Blender materials will be used instead.")
+        traceback.print_exc()
+        # Real fallback: bake the dominant color of the input image onto the
+        # mesh as a flat PBR base color so the product isn't pure white.
+        try:
+            mesh = _apply_dominant_color_fallback(mesh, image_path)
+            print("      Applied dominant-color fallback material ✓")
+        except Exception as _fb_e:
+            print(f"      ⚠ Color fallback also failed ({_fb_e}) — mesh will be untextured")
 
     # ── Export ─────────────────────────────────────────────────────────────────
     generated = work_dir / "model.glb"
@@ -401,8 +454,8 @@ def render_scene(
     # GPU diagnostic lines are invisible if the worker is killed mid-render.
     import threading
     needles = (
-        "[gpu]", "cycles", "cuda", "optix", "device:", "rendered ",
-        "fall", "error", "warning", "fail",
+        "[gpu]", "[scene]", "cycles", "cuda", "optix", "device:", "rendered ",
+        "fall", "error", "warning", "fail", "saved:", "fra:", "import",
     )
     seen: set = set()
     stdout_lines: list = []
@@ -537,7 +590,16 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
                 ffmpeg_cmd, capture_output=True, text=True, timeout=300)
             if ffmpeg_result.returncode == 0 and output_video.exists():
                 upload_video = output_video
-                print(f"      Video encoded: {output_video.stat().st_size // 1024} KB")
+                _frame_count = len(list(frames_dir.glob("frame_*.png")))
+                _size_kb = output_video.stat().st_size // 1024
+                print(f"      Video encoded: {_size_kb} KB ({_frame_count} frames)")
+                if _frame_count == 0:
+                    raise RuntimeError(
+                        "Blender produced 0 frames — scene likely failed silently. "
+                        "Check the [scene] / [blender] log lines above.")
+                if _size_kb < 150:
+                    print(f"      ⚠ Video suspiciously small ({_size_kb} KB) — "
+                          "scene may be empty/black. Check product placement & lighting.")
             else:
                 raise RuntimeError(
                     f"ffmpeg encoding failed.\n{ffmpeg_result.stderr[-1000:]}")

@@ -64,7 +64,7 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
                 _min_b[_i] = min(_min_b[_i], _wc[_i])
                 _max_b[_i] = max(_max_b[_i], _wc[_i])
     _height = max(_max_b.z - _min_b.z, 0.01)
-    _scale = 0.5 / _height
+    _scale = 1.2 / _height
     _cx = (_min_b.x + _max_b.x) / 2
     _cy = (_min_b.y + _max_b.y) / 2
     for _obj in _imported:
