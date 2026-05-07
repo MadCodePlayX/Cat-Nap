@@ -127,11 +127,12 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     scene.frame_set(1)
     bpy.ops.render.render(write_still=True)
 
-    scene.render.filepath = output_video_path
-    scene.render.image_settings.file_format = "FFMPEG"
-    scene.render.ffmpeg.format = "MPEG4"
-    scene.render.ffmpeg.codec = "H264"
-    scene.render.ffmpeg.constant_rate_factor = "HIGH"
+    # FFMPEG output removed in Blender 5.x — render PNG frame sequence instead.
+    # worker.py encodes the frames to MP4 using system ffmpeg.
+    import os as _os
+    _os.makedirs(output_video_path, exist_ok=True)
+    scene.render.filepath = output_video_path + "/frame_####"
+    scene.render.image_settings.file_format = "PNG"
     bpy.ops.render.render(animation=True)
 
 
