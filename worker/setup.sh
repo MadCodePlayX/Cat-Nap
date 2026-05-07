@@ -35,12 +35,13 @@ else
 fi
 
 # nvdiffrast — CUDA rasterizer used by the custom_rasterizer shim for texturing
+# Not on PyPI — install from GitHub source (requires CUDA toolkit + C++ compiler)
 if ! python3 -c "import nvdiffrast" 2>/dev/null; then
-  echo "      Installing nvdiffrast (CUDA rasterizer for texture painting) ..."
-  pip install nvdiffrast --quiet
+  echo "      Installing nvdiffrast from source (needs CUDA toolkit) ..."
+  pip install git+https://github.com/NVlabs/nvdiffrast.git --quiet
   echo "      nvdiffrast installed ✓"
 else
-  echo "      nvdiffrast already installed ✓"
+  echo "      nvdiffrast already available ✓"
 fi
 
 echo "      Python env ready ✓"
