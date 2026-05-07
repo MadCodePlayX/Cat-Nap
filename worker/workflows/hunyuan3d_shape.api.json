@@ -1,0 +1,83 @@
+{
+  "_comment": "Hunyuan3D-2.1 SHAPE-only workflow (matches your screenshot). Replace this file with your own export from ComfyUI: right-click empty canvas -> Save (API Format). Keep the node IDs stable or update PATCH_NODES in worker.py. The worker patches node 2 (LoadImage) and reads node 10 (SaveGLB / Save 3D Model).",
+
+  "1": {
+    "class_type": "ImageOnlyCheckpointLoader",
+    "inputs": {
+      "ckpt_name": "hunyuan_3d_v2.1.safetensors"
+    },
+    "_meta": {"title": "Image Only Checkpoint Loader (img2vid)"}
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.png"
+    },
+    "_meta": {"title": "Load Image"}
+  },
+  "3": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": ["1", 1],
+      "image": ["2", 0],
+      "crop": "center"
+    }
+  },
+  "4": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": ["1", 0],
+      "shift": 1.00
+    }
+  },
+  "5": {
+    "class_type": "Hunyuan3Dv2Conditioning",
+    "inputs": {
+      "clip_vision_output": ["3", 0]
+    }
+  },
+  "6": {
+    "class_type": "EmptyLatentHunyuan3Dv2",
+    "inputs": {
+      "resolution": 4096,
+      "batch_size": 1
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["4", 0],
+      "positive": ["5", 0],
+      "negative": ["5", 1],
+      "latent_image": ["6", 0],
+      "seed": 107,
+      "steps": 30,
+      "cfg": 5.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1.0
+    }
+  },
+  "8": {
+    "class_type": "VAEDecodeHunyuan3D",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "9": {
+    "class_type": "VoxelToMesh",
+    "inputs": {
+      "voxel": ["8", 0],
+      "threshold": 0.60
+    }
+  },
+  "10": {
+    "class_type": "SaveGLB",
+    "inputs": {
+      "mesh": ["9", 0],
+      "filename_prefix": "catnap/mesh"
+    },
+    "_meta": {"title": "Save 3D Model"}
+  }
+}

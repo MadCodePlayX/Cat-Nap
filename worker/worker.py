@@ -151,6 +151,61 @@ def prepare_image(src: Path, dest: Path, size: int = MAX_IMAGE_SIZE) -> Path:
     return dest
 
 
+# ── 3D Generation via ComfyUI ─────────────────────────────────────────────────
+def generate_3d_via_comfy(image_path: Path, output_glb: Path,
+                          comfy_url: str, workflow_path: Path,
+                          on_progress: Optional[Callable[[int, str], None]] = None
+                          ) -> Path:
+    """Run a ComfyUI workflow that takes one image and produces a GLB.
+
+    The workflow JSON must declare which nodes the worker should patch and
+    read. Either set these via the env vars CATNAP_LOAD_NODE / CATNAP_SAVE_NODE
+    or rely on the defaults below (matching workflows/hunyuan3d_shape.api.json).
+    """
+    from comfy_client import ComfyClient
+
+    load_node = os.environ.get("CATNAP_LOAD_NODE", "2")    # LoadImage
+    save_node = os.environ.get("CATNAP_SAVE_NODE", "10")   # SaveGLB / Hy3DExportMesh
+
+    workflow = json.loads(workflow_path.read_text())
+    # Strip _comment_* keys ComfyUI doesn't understand
+    workflow = {k: v for k, v in workflow.items() if not k.startswith("_")}
+    if load_node not in workflow:
+        raise RuntimeError(
+            f"Workflow {workflow_path.name} has no node '{load_node}' to patch. "
+            f"Set CATNAP_LOAD_NODE to the LoadImage node id. "
+            f"Nodes present: {list(workflow.keys())}"
+        )
+    if save_node not in workflow:
+        raise RuntimeError(
+            f"Workflow {workflow_path.name} has no node '{save_node}' to read. "
+            f"Set CATNAP_SAVE_NODE to your SaveGLB / Hy3DExportMesh node id."
+        )
+
+    client = ComfyClient(comfy_url)
+    if not client.health():
+        raise RuntimeError(
+            f"ComfyUI not reachable at {comfy_url}. "
+            "Start it with: python main.py --listen 127.0.0.1 --port 8188"
+        )
+
+    uploaded_name = client.upload_image(image_path)
+    workflow[load_node]["inputs"]["image"] = uploaded_name
+    print(f"      [comfy] Uploaded {uploaded_name}, queueing workflow ...")
+
+    glb_bytes = client.run_workflow(
+        workflow,
+        output_node_id=save_node,
+        on_progress=on_progress,
+        pct_start=15,
+        pct_end=55,
+        label="ComfyUI 3D",
+    )
+    output_glb.write_bytes(glb_bytes)
+    print(f"      [comfy] GLB saved: {output_glb.stat().st_size // 1024} KB")
+    return output_glb
+
+
 # ── Texture fallback: dominant color baked as PBR base ────────────────────────
 def _apply_dominant_color_fallback(mesh, image_path: Path):
     """When Hunyuan paint fails, sample the dominant non-transparent color from
@@ -495,7 +550,9 @@ def render_scene(
 def process_job(api: StudioAPI, job: dict, worker_id: int,
                 hunyuan_dir: Path | None = None, api_base: str = "",
                 blender_bin: str | None = None,
-                ffmpeg_bin: str | None = None) -> None:
+                ffmpeg_bin: str | None = None,
+                comfy_url: str | None = None,
+                comfy_workflow: Path | None = None) -> None:
     job_id = job["id"]
     product_id = job["productId"]
     scene_type = job["sceneType"]          # living_room | bedroom | balcony | garden | kitchen
@@ -546,8 +603,16 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
             def _on_3d_progress(pct: int, stage: str) -> None:
                 progress("generating_3d", stage, pct)
 
-            generate_3d_hunyuan(primary_image, model_glb, tmp / "hunyuan_out",
-                               hunyuan_dir=hunyuan_dir, on_progress=_on_3d_progress)
+            if comfy_url:
+                generate_3d_via_comfy(
+                    primary_image, model_glb,
+                    comfy_url=comfy_url, workflow_path=comfy_workflow,
+                    on_progress=_on_3d_progress,
+                )
+            else:
+                generate_3d_hunyuan(primary_image, model_glb, tmp / "hunyuan_out",
+                                   hunyuan_dir=hunyuan_dir,
+                                   on_progress=_on_3d_progress)
             progress("generating_3d", "3D model generated", 55)
 
             # ── 5. Upload GLB model ──────────────────────────────────────────
@@ -662,12 +727,25 @@ def main():
                         help="Full path to blender executable, e.g. D:\\blender-5.1\\blender.exe")
     parser.add_argument("--ffmpeg-path", default=None,
                         help="Full path to ffmpeg executable, e.g. D:\\ffmpeg\\bin\\ffmpeg.exe")
+    parser.add_argument("--comfy-url", default=None,
+                        help="If set (e.g. http://127.0.0.1:8188), use a running ComfyUI "
+                             "server for 3D generation instead of in-process hy3dgen.")
+    parser.add_argument("--comfy-workflow", default=None,
+                        help="Path to the ComfyUI workflow JSON (API format). "
+                             "Defaults to worker/workflows/hunyuan3d_shape.api.json")
     args = parser.parse_args()
 
     hunyuan_dir = Path(args.hunyuan_dir) if args.hunyuan_dir else None
     blender_bin = args.blender_path or None
     ffmpeg_bin = args.ffmpeg_path or None
     api_base = args.api_url
+    comfy_url = args.comfy_url
+    comfy_workflow = (Path(args.comfy_workflow)
+                      if args.comfy_workflow
+                      else WORKER_DIR / "workflows" / "hunyuan3d_shape.api.json")
+    if comfy_url and not comfy_workflow.exists():
+        print(f"ERROR: Comfy workflow not found: {comfy_workflow}")
+        sys.exit(1)
 
     api = StudioAPI(args.api_url)
 
@@ -701,7 +779,8 @@ def main():
             if job:
                 process_job(api, job, worker_id,
                             hunyuan_dir=hunyuan_dir, api_base=api_base,
-                            blender_bin=blender_bin, ffmpeg_bin=ffmpeg_bin)
+                            blender_bin=blender_bin, ffmpeg_bin=ffmpeg_bin,
+                            comfy_url=comfy_url, comfy_workflow=comfy_workflow)
             else:
                 time.sleep(args.poll_interval)
     except KeyboardInterrupt:
