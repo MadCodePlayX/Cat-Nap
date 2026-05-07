@@ -441,7 +441,8 @@ def render_scene(
 # ── Job processor ──────────────────────────────────────────────────────────────
 def process_job(api: StudioAPI, job: dict, worker_id: int,
                 hunyuan_dir: Path | None = None, api_base: str = "",
-                blender_bin: str | None = None) -> None:
+                blender_bin: str | None = None,
+                ffmpeg_bin: str | None = None) -> None:
     job_id = job["id"]
     product_id = job["productId"]
     scene_type = job["sceneType"]          # living_room | bedroom | balcony | garden | kitchen
@@ -502,36 +503,40 @@ def process_job(api: StudioAPI, job: dict, worker_id: int,
             model_url = None
             progress("compositing", "Compositing scene in Blender", 60)
 
-            # ── 6. Blender: compose scene + render video ───────────────────
+            # ── 6. Blender: compose scene + render PNG frame sequence ──────
+            # Blender 5.x removed FFMPEG output; we render frames then encode.
+            frames_dir = tmp / "frames"
             output_video = tmp / "output.mp4"
             output_thumb = tmp / "thumbnail.png"
 
             progress("rendering_video", f"Rendering {scene_type} scene", 65)
-            render_scene(model_glb, scene_type, animal_type, output_video, output_thumb,
+            render_scene(model_glb, scene_type, animal_type, frames_dir, output_thumb,
                          blender_bin=blender_bin)
 
             progress("rendering_video", "Encoding video", 90)
 
-            # ── 7. Compress video with ffmpeg before upload ────────────────
-            # Blender renders uncompressed or losslessly — compress to H264
-            # so the file stays small enough to pass through the Replit proxy.
-            compressed_video = tmp / "output_compressed.mp4"
-            ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+            # ── 7. Encode PNG frame sequence → MP4 with ffmpeg ────────────
+            _ffmpeg = ffmpeg_bin or shutil.which("ffmpeg") or "ffmpeg"
+            frame_pattern = str(frames_dir / "frame_%04d.png")
             ffmpeg_cmd = [
-                ffmpeg_bin, "-y", "-i", str(output_video),
+                _ffmpeg, "-y",
+                "-framerate", "24",
+                "-start_number", "1",
+                "-i", frame_pattern,
                 "-vcodec", "libx264", "-crf", "23",
                 "-preset", "fast", "-vf", "scale=-2:720",
+                "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",
-                str(compressed_video),
+                str(output_video),
             ]
             ffmpeg_result = subprocess.run(
                 ffmpeg_cmd, capture_output=True, text=True, timeout=300)
-            if ffmpeg_result.returncode == 0 and compressed_video.exists():
-                upload_video = compressed_video
-                print(f"      Video compressed: {compressed_video.stat().st_size // 1024} KB")
+            if ffmpeg_result.returncode == 0 and output_video.exists():
+                upload_video = output_video
+                print(f"      Video encoded: {output_video.stat().st_size // 1024} KB")
             else:
-                upload_video = output_video  # fall back to original
-                print(f"      ⚠ ffmpeg compression failed, uploading original")
+                raise RuntimeError(
+                    f"ffmpeg encoding failed.\n{ffmpeg_result.stderr[-1000:]}")
 
             # ── 8. Upload outputs ──────────────────────────────────────────
             video_url = api.upload_file(job_id, "video", upload_video)
@@ -589,10 +594,13 @@ def main():
                         help="Path to Hunyuan3D-2 repo (default: ../Hunyuan3D-2 relative to worker/)")
     parser.add_argument("--blender-path", default=None,
                         help="Full path to blender executable, e.g. D:\\blender-5.1\\blender.exe")
+    parser.add_argument("--ffmpeg-path", default=None,
+                        help="Full path to ffmpeg executable, e.g. D:\\ffmpeg\\bin\\ffmpeg.exe")
     args = parser.parse_args()
 
     hunyuan_dir = Path(args.hunyuan_dir) if args.hunyuan_dir else None
     blender_bin = args.blender_path or None
+    ffmpeg_bin = args.ffmpeg_path or None
     api_base = args.api_url
 
     api = StudioAPI(args.api_url)
@@ -627,7 +635,7 @@ def main():
             if job:
                 process_job(api, job, worker_id,
                             hunyuan_dir=hunyuan_dir, api_base=api_base,
-                            blender_bin=blender_bin)
+                            blender_bin=blender_bin, ffmpeg_bin=ffmpeg_bin)
             else:
                 time.sleep(args.poll_interval)
     except KeyboardInterrupt:
