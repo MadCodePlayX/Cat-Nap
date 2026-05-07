@@ -14,6 +14,25 @@ VENV="$SCRIPT_DIR/.venv"
 PY="$VENV/bin/python3"
 PIP="$VENV/bin/pip"
 
+# Prefer python3.11 — PyTorch has wheels for 3.10-3.12 but NOT 3.13/3.14 yet.
+# Falls back to python3.12, then python3.10, then system python3.
+PYTHON_BIN=""
+for candidate in python3.11 python3.12 python3.10 python3; do
+  if command -v "$candidate" &>/dev/null; then
+    VER=$("$candidate" -c "import sys; print(sys.version_info[:2])")
+    if [[ "$VER" == "(3, 10)" || "$VER" == "(3, 11)" || "$VER" == "(3, 12)" ]]; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+  echo "ERROR: Python 3.10/3.11/3.12 not found."
+  echo "Install it with: sudo apt-get install python3.11 python3.11-venv"
+  exit 1
+fi
+echo "Using $PYTHON_BIN ($($PYTHON_BIN --version))"
+
 echo ""
 echo "=============================================="
 echo "  3D Product Studio — Worker Repair"
@@ -34,25 +53,29 @@ fi
 # We inherit the system torch (which has working CUDA drivers).
 # Then we install matching torchvision on top.
 echo ""
-echo "[1] Rebuilding venv (inheriting system torch + CUDA) ..."
+echo "[1] Rebuilding venv with Python 3.11 (system-site-packages for torch) ..."
 rm -rf "$VENV"
-python3 -m venv --system-site-packages "$VENV"
+"$PYTHON_BIN" -m venv --system-site-packages "$VENV"
 "$PIP" install --upgrade pip wheel --quiet
 "$PIP" cache purge 2>/dev/null || true
-echo "    Venv ready ✓"
+echo "    Venv ready ✓ ($("$PY" --version))"
 
-# ── Detect system torch version ───────────────────────────
+# ── Detect torch in the venv (inherited from system) ──────
 echo ""
-echo "[2] Detecting system torch version ..."
-TORCH_VER=$(python3 -c "import torch; print(torch.__version__)" 2>/dev/null || echo "")
+echo "[2] Detecting torch version in venv ..."
+TORCH_VER=$("$PY" -c "import torch; print(torch.__version__)" 2>/dev/null || echo "")
 if [ -z "$TORCH_VER" ]; then
-  echo "    ✗ torch not found on system Python — cannot continue"
-  echo "    Install torch manually: https://pytorch.org/get-started/locally/"
-  exit 1
+  echo "    torch not found via system-site-packages — installing from CUDA index ..."
+  "$PIP" install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124 \
+    --no-cache-dir --quiet \
+    && echo "    torch installed from CUDA index ✓" \
+    || { echo "    ✗ torch install failed — check internet connection"; exit 1; }
+  TORCH_VER=$("$PY" -c "import torch; print(torch.__version__)" 2>/dev/null || echo "")
 fi
 
-TORCH_CUDA=$(python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
-echo "    System torch: $TORCH_VER  CUDA available: $TORCH_CUDA"
+TORCH_CUDA=$("$PY" -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
+echo "    torch: $TORCH_VER  CUDA available: $TORCH_CUDA"
 
 # Extract major.minor (e.g. 2.11 from 2.11.0+cu124)
 TORCH_MAJOR_MINOR=$(echo "$TORCH_VER" | grep -oP '^\d+\.\d+')
