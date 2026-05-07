@@ -85,25 +85,32 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     # ── Render settings ───────────────────────────────────────────────────────
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
-    scene.cycles.samples = 128
-    _cprefs = bpy.context.preferences.addons['cycles'].preferences
-    for _dtype in ('OPTIX', 'CUDA'):
+
+    # ── Force GPU rendering ───────────────────────────────────────────────────
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    try:
+        prefs.compute_device_type = "OPTIX"
+    except Exception:
         try:
-            _cprefs.compute_device_type = _dtype
-            _cprefs.get_devices()
-            for _dev in _cprefs.devices:
-                _dev.use = True
-            print(f"Cycles GPU backend: {_dtype} ✓")
-            break
+            prefs.compute_device_type = "CUDA"
         except Exception:
-            continue
-    scene.cycles.device = 'GPU'
-    # OptiX denoiser: 64 samples + denoising ≈ 512 samples without, far faster
+            pass
+    prefs.get_devices()
+    for device in prefs.devices:
+        device.use = True
+    bpy.context.scene.cycles.device = "GPU"
+
+    print("── Blender GPU devices ──")
+    for d in prefs.devices:
+        print(f"  {d.name}  type={d.type}  use={d.use}")
+    print(f"  Cycles device mode: {bpy.context.scene.cycles.device}")
+
+    # OptiX denoiser: 64 samples + denoising ≈ 512 without, far faster
     scene.cycles.use_denoising = True
     try:
-        scene.cycles.denoiser = 'OPTIX'          # RTX GPU denoiser
+        scene.cycles.denoiser = "OPTIX"
     except Exception:
-        scene.cycles.denoiser = 'OPENIMAGEDENOISE'  # CPU fallback
+        scene.cycles.denoiser = "OPENIMAGEDENOISE"
     scene.cycles.samples = 64
     scene.render.resolution_x = 1920
     scene.render.resolution_y = 1080
