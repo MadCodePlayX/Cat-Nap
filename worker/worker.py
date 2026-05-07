@@ -211,19 +211,28 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     @contextlib.contextmanager
     def _tqdm_progress(pct_start: int, pct_end: int, label: str):
-        """Patch tqdm.update so each diffusion step fires on_progress."""
+        """Patch tqdm.update so diffusion steps fire on_progress.
+        Only fires for bars with ≤200 total steps (diffusion, not volume decode)
+        and throttles to at most one API call every 3 seconds."""
         if on_progress is None:
             yield
             return
         _orig = _tqdm_mod.tqdm.update
+        _last_fire: list[float] = [0.0]
         def _hook(self, n: int = 1) -> None:
             _orig(self, n)
-            if self.total and self.total > 0:
-                frac = min(self.n / self.total, 1.0)
-                pct = int(pct_start + frac * (pct_end - pct_start))
-                eta = (self.total - self.n) / (self.n / max(time.time() - self.start_t, 0.001))
-                eta_str = f"ETA {int(eta)}s" if eta > 1 else "finishing…"
-                on_progress(pct, f"{label} — step {self.n}/{self.total} ({eta_str})")
+            if not self.total or self.total > 200:
+                return  # skip volume decode (7k+ steps) and other heavy bars
+            now = time.time()
+            if now - _last_fire[0] < 3.0:
+                return  # throttle: max one API call every 3 seconds
+            _last_fire[0] = now
+            frac = min(self.n / self.total, 1.0)
+            pct = int(pct_start + frac * (pct_end - pct_start))
+            elapsed = max(now - self.start_t, 0.001)
+            remaining = (self.total - self.n) * (elapsed / max(self.n, 1))
+            eta_str = f"ETA {int(remaining)}s" if remaining > 1 else "finishing…"
+            on_progress(pct, f"{label} — step {self.n}/{self.total} ({eta_str})")
         _tqdm_mod.tqdm.update = _hook
         try:
             yield
