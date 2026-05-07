@@ -50,7 +50,11 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
 
     # Import product
     bpy.ops.import_scene.gltf(filepath=model_glb_path)
-    for obj in bpy.context.selected_objects:
+    _imported = list(bpy.context.selected_objects)
+    if not _imported:
+        print(f"[ERROR] GLB import returned 0 objects — bad path or corrupt file: {model_glb_path}")
+        sys.exit(1)
+    for obj in _imported:
         obj.location = (0.8, -0.5, 0.0)
 
     # Lights
