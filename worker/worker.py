@@ -35,6 +35,16 @@ if _local_bin not in os.environ.get("PATH", ""):
 import requests
 from PIL import Image
 
+# ── GPU performance flags (set before any torch ops) ───────────────────────────
+try:
+    import torch
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True   # Tensor Cores for matmul
+        torch.backends.cudnn.benchmark = True           # Auto-tune conv algorithms
+        torch.backends.cudnn.allow_tf32 = True
+except Exception:
+    pass
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 WORKER_DIR = Path(__file__).parent
 SCENES_DIR = WORKER_DIR / "blender_scenes"
@@ -178,14 +188,21 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     # Load image — must be RGBA with background removed
     image = PILImage.open(image_path).convert("RGBA")
 
+    import torch as _torch
+
     # Shape generation (image → 3D mesh)
     print("      Loading shape pipeline ...")
     pipeline_shapegen = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
         "tencent/Hunyuan3D-2",
         device="cuda",
+        torch_dtype=_torch.float16,   # fp16: 2x faster, half VRAM
     )
     print("      Generating 3D mesh ...")
     mesh = pipeline_shapegen(image=image)[0]
+
+    # Free VRAM before loading the texture pipeline (both are large models)
+    del pipeline_shapegen
+    _torch.cuda.empty_cache()
 
     # Texture generation — paints the mesh using multiview diffusion
     try:
@@ -203,6 +220,7 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         print("      Loading texture pipeline ...")
         pipeline_texgen = Hunyuan3DPaintPipeline.from_pretrained(
             "tencent/Hunyuan3D-2",
+            torch_dtype=_torch.float16,
         )
         print("      Painting texture ...")
         mesh = pipeline_texgen(mesh, image=image)
