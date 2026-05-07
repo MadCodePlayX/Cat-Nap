@@ -8,37 +8,42 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Always use explicit venv paths — avoids bash hash-cache resolving
+# python3/pip to the system binaries after 'source activate'
+VENV="$SCRIPT_DIR/.venv"
+PY="$VENV/bin/python3"
+PIP="$VENV/bin/pip"
+
 echo ""
 echo "=============================================="
 echo "  3D Product Studio — Worker Setup"
-echo "  RTX 5090 Edition"
+echo "  RTX 4080 Super / 5090 Edition"
 echo "=============================================="
 echo ""
 
 # ── 1. Python env ─────────────────────────────────────────
 echo "[1/5] Creating Python virtual environment ..."
 # --system-site-packages: inherit system torch/CUDA — avoids re-downloading on RunPod
-python3 -m venv --system-site-packages "$SCRIPT_DIR/.venv"
-source "$SCRIPT_DIR/.venv/bin/activate"
+python3 -m venv --system-site-packages "$VENV"
 
-pip install --upgrade pip wheel --quiet
+"$PIP" install --upgrade pip wheel --quiet
 
 # Skip torch reinstall if already present with CUDA (common on RunPod)
-if python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+if "$PY" -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
   echo "      PyTorch with CUDA already available — skipping torch install ✓"
-  pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+  "$PIP" install -r "$SCRIPT_DIR/requirements.txt" --quiet
 else
   echo "      Installing PyTorch with CUDA 12.4 ..."
-  pip install torch torchvision torchaudio \
+  "$PIP" install torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cu124 --quiet
-  pip install -r "$SCRIPT_DIR/requirements.txt" --quiet
+  "$PIP" install -r "$SCRIPT_DIR/requirements.txt" --quiet
 fi
 
 # nvdiffrast — CUDA rasterizer used by the custom_rasterizer shim for texturing
 # Not on PyPI — install from GitHub source (requires CUDA toolkit + C++ compiler)
-if ! python3 -c "import nvdiffrast" 2>/dev/null; then
+if ! "$PY" -c "import nvdiffrast" 2>/dev/null; then
   echo "      Installing nvdiffrast from source (needs CUDA toolkit) ..."
-  pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation --quiet
+  "$PIP" install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation --quiet
   echo "      nvdiffrast installed ✓"
 else
   echo "      nvdiffrast already available ✓"
@@ -59,17 +64,17 @@ else
   git -C "$HUNYUAN_DIR" pull
 fi
 
-echo "      Installing Hunyuan3D-2 dependencies ..."
-pip install -e "$HUNYUAN_DIR" --quiet
+echo "      Installing Hunyuan3D-2 package ..."
+"$PIP" install -e "$HUNYUAN_DIR" --quiet
 # Force-reinstall huggingface_hub into the venv after hy3dgen
-# (hy3dgen may inherit an old system version via --system-site-packages)
-pip install "huggingface-hub>=0.20.0" --force-reinstall --quiet
+# (hy3dgen may resolve to an old system version via --system-site-packages)
+"$PIP" install "huggingface-hub>=0.20.0" --force-reinstall --quiet
 echo "      Dependencies installed ✓"
 
 # Download model weights (optional pre-fetch — ~7GB)
 # The worker auto-downloads on first run if skipped here.
 echo "      Pre-fetching model weights (optional — ~7GB, Ctrl-C to skip) ..."
-python3 -c "
+"$PY" -c "
 from huggingface_hub import snapshot_download
 snapshot_download(
     repo_id='tencent/Hunyuan3D-2',
@@ -82,8 +87,9 @@ print('      Weights downloaded ✓')
 # ── 3. rembg model ────────────────────────────────────────
 echo ""
 echo "[3/5] Pre-downloading rembg background removal model ..."
-python3 -c "from rembg import remove; from PIL import Image; remove(Image.new('RGB', (64,64)))"
-echo "      rembg model cached ✓"
+"$PY" -c "from rembg import remove; from PIL import Image; remove(Image.new('RGB', (64,64)))" \
+  && echo "      rembg model cached ✓" \
+  || echo "      ⚠ rembg pre-cache skipped — will download on first job."
 
 # ── 4. Blender 4.x ────────────────────────────────────────
 echo ""
@@ -116,10 +122,11 @@ echo "  To start the worker:"
 echo ""
 echo "  source worker/.venv/bin/activate"
 echo "  python worker/worker.py \\"
-echo "    --api-url https://YOUR-APP.replit.app \\"
-echo "    --worker-name 'RTX5090-Main'"
+echo "    --api-url https://cat-nap.replit.app \\"
+echo "    --worker-name 'Local-RTX4080S' \\"
+echo "    --hunyuan-dir ~/Cat-Nap/Hunyuan3D-2"
 echo ""
-echo "  Your RTX 5090 will automatically:"
+echo "  Your GPU will automatically:"
 echo "    1. Register in the Workers page"
 echo "    2. Poll for pending render jobs"
 echo "    3. Run Hunyuan3D-2 for 3D generation"
