@@ -60,11 +60,15 @@ else
 fi
 
 echo "      Installing Hunyuan3D-2 dependencies ..."
-pip install huggingface_hub --upgrade --quiet
-pip install -e "$HUNYUAN_DIR"
+pip install -e "$HUNYUAN_DIR" --quiet
+# Force-reinstall huggingface_hub into the venv after hy3dgen
+# (hy3dgen may inherit an old system version via --system-site-packages)
+pip install "huggingface-hub>=0.20.0" --force-reinstall --quiet
+echo "      Dependencies installed ✓"
 
-# Download model weights (first run only — ~7GB)
-echo "      Downloading model weights (this may take a while on first run) ..."
+# Download model weights (optional pre-fetch — ~7GB)
+# The worker auto-downloads on first run if skipped here.
+echo "      Pre-fetching model weights (optional — ~7GB, Ctrl-C to skip) ..."
 python3 -c "
 from huggingface_hub import snapshot_download
 snapshot_download(
@@ -73,7 +77,7 @@ snapshot_download(
     ignore_patterns=['*.md', '*.txt']
 )
 print('      Weights downloaded ✓')
-"
+" || echo "      ⚠ Weight pre-fetch skipped — will download automatically on first job."
 
 # ── 3. rembg model ────────────────────────────────────────
 echo ""
