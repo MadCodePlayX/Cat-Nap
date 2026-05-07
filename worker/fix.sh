@@ -151,6 +151,7 @@ echo "[4] Installing remaining Python packages ..."
   --quiet
 echo "    Core packages installed ✓"
 
+"$PIP" install "rpds-py" --quiet
 "$PIP" install "rembg[gpu]>=2.0.50" onnxruntime-gpu --quiet
 echo "    rembg[gpu] + onnxruntime-gpu installed ✓"
 
