@@ -102,16 +102,33 @@ else
   BLENDER_VERSION="4.3.2"
   BLENDER_TARBALL="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
   BLENDER_URL="https://download.blender.org/release/Blender4.3/${BLENDER_TARBALL}"
-  BLENDER_INSTALL_DIR="/opt/blender"
+  # Install to ~/.local/blender — no sudo required
+  BLENDER_INSTALL_DIR="$HOME/.local/blender"
 
-  wget -q --show-progress -O "/tmp/${BLENDER_TARBALL}" "${BLENDER_URL}"
+  # Reuse tarball if already downloaded (e.g. previous failed run)
+  if [ ! -f "/tmp/${BLENDER_TARBALL}" ]; then
+    wget -q --show-progress -O "/tmp/${BLENDER_TARBALL}" "${BLENDER_URL}"
+  else
+    echo "      Tarball already in /tmp — reusing ✓"
+  fi
+
   mkdir -p "${BLENDER_INSTALL_DIR}"
   tar -xf "/tmp/${BLENDER_TARBALL}" -C "${BLENDER_INSTALL_DIR}" --strip-components=1
-  rm "/tmp/${BLENDER_TARBALL}"
+  rm -f "/tmp/${BLENDER_TARBALL}"
 
-  ln -sf "${BLENDER_INSTALL_DIR}/blender" /usr/local/bin/blender
-  echo "      Blender $(blender --version 2>&1 | head -1) installed ✓"
+  # Add to PATH for this session and future shells
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "${BLENDER_INSTALL_DIR}/blender" "$HOME/.local/bin/blender"
+
+  # Ensure ~/.local/bin is in PATH right now
+  export PATH="$HOME/.local/bin:$PATH"
+
+  echo "      Blender $("$HOME/.local/blender/blender" --version 2>&1 | head -1) installed ✓"
+  echo "      Add to your shell: export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
+
+# Ensure blender is on PATH for the rest of this script
+export PATH="$HOME/.local/bin:$PATH"
 
 # ── 5. Done ───────────────────────────────────────────────
 echo ""
