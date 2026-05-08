@@ -55,7 +55,6 @@ MAX_IMAGE_SIZE = 1024     # px, resize inputs before 3D gen
 
 # ── Pipeline cache — stay loaded in VRAM across jobs ───────────────────────────
 SHAPE_PIPELINE = None
-TEXTURE_PIPELINE = None
 
 
 # ── API client ─────────────────────────────────────────────────────────────────
@@ -252,47 +251,45 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
                         hunyuan_dir: Path | None = None,
                         on_progress: Optional[Callable[[int, str], None]] = None) -> Path:
     """
-    Run Hunyuan3D-2 inference to generate a .glb from a single image.
-    Uses the hy3dgen Python API directly (no infer.py subprocess).
-    Pipelines are cached globally so they stay in VRAM across jobs.
-    hunyuan_dir defaults to worker/../Hunyuan3D-2/ (set by setup.sh).
-    Override with --hunyuan-dir if you cloned it elsewhere (e.g. network volume).
+    Generate a .glb from a single image using Hunyuan3D-2.1 SHAPE pipeline.
+
+    Phase 1 / Chunk 1: shape only. The multiview paint pipeline is intentionally
+    skipped — it's the most fragile part of the stack (constant diffusers compat
+    breakage, monkey-patched dynamic modules) and gives us no real benefit until
+    we're ready to invest in proper PBR. Instead we always bake the dominant
+    color of the input image as the mesh's base color, which is fast, never
+    fails, and produces a recognizable preview render.
+
+    hunyuan_dir defaults to worker/../Hunyuan3D-2.1/ (set by setup.sh).
+    Override with --hunyuan-dir if you cloned it elsewhere.
     """
     import torch
 
-    # ── GPU optimisation ───────────────────────────────────────────────────────
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     torch.backends.cudnn.benchmark = True
     if torch.cuda.is_available():
         torch.set_float32_matmul_precision("high")
 
-    global SHAPE_PIPELINE, TEXTURE_PIPELINE
+    global SHAPE_PIPELINE
 
     if hunyuan_dir is None:
-        hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2"
+        hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2.1"
 
-    # Validate repo
     if not (hunyuan_dir / "hy3dgen").exists():
         raise RuntimeError(
-            f"Hunyuan3D-2 not found at {hunyuan_dir}.\n"
-            "Run: git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git "
+            f"Hunyuan3D-2.1 not found at {hunyuan_dir}.\n"
+            "Run: git clone https://github.com/Tencent/Hunyuan3D-2.1.git "
             f"{hunyuan_dir} && pip install -e {hunyuan_dir}"
         )
 
-    # Add paths
     if str(hunyuan_dir) not in sys.path:
         sys.path.insert(0, str(hunyuan_dir))
-    dr_path = str(hunyuan_dir / "hy3dgen" / "texgen" / "differentiable_renderer")
-    if dr_path not in sys.path:
-        sys.path.insert(0, dr_path)
-    # Make worker/custom_rasterizer.py importable
     if str(WORKER_DIR) not in sys.path:
         sys.path.insert(0, str(WORKER_DIR))
 
     from PIL import Image as PILImage
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
-    from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
     work_dir.mkdir(parents=True, exist_ok=True)
     image = PILImage.open(image_path).convert("RGBA")
@@ -337,9 +334,9 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     # ── Shape pipeline (cached in VRAM) ────────────────────────────────────────
     if SHAPE_PIPELINE is None:
-        print("      Loading shape pipeline (first run only) ...")
+        print("      Loading Hunyuan3D-2.1 shape pipeline (first run only) ...")
         SHAPE_PIPELINE = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-            "tencent/Hunyuan3D-2",
+            "tencent/Hunyuan3D-2.1",
             device="cuda",
         )
         if hasattr(SHAPE_PIPELINE, "model"):
@@ -350,67 +347,19 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
 
     print("      Generating 3D mesh ...")
     _t0 = time.time()
-    with _tqdm_progress(16, 30, "Shape gen"), \
+    with _tqdm_progress(16, 50, "Shape gen"), \
          torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         mesh = SHAPE_PIPELINE(image=image)[0]
     print(f"      Shape done in {time.time() - _t0:.1f}s  |  "
           f"VRAM {torch.cuda.memory_allocated()/1024**3:.2f} GB allocated")
 
-    # ── Texture pipeline (cached in VRAM) ──────────────────────────────────────
+    # ── Always bake dominant input-image color as the mesh material ───────────
+    # (Phase 1: paint pipeline intentionally disabled — see docstring above)
     try:
-        # hy3dgen calls DiffusionPipeline.from_pretrained() internally without
-        # trust_remote_code=True — monkey-patch once to inject it.
-        from diffusers import DiffusionPipeline as _DP
-        _orig_fp = _DP.from_pretrained.__func__
-        @classmethod  # type: ignore[misc]
-        def _patched_fp(cls, *args, **kwargs):
-            kwargs.setdefault("trust_remote_code", True)
-            return _orig_fp(cls, *args, **kwargs)
-        _DP.from_pretrained = _patched_fp
-
-        # hy3dgen sometimes produces textures as (1,1,H,W,C) numpy arrays which
-        # PIL.fromarray can't handle. Patch it to squeeze extra dims first.
-        from PIL import Image as _PILPatch
-        _orig_fromarray = _PILPatch.fromarray
-        def _safe_fromarray(obj, mode=None):
-            import numpy as np
-            if hasattr(obj, "shape") and obj.ndim > 3:
-                obj = obj.squeeze()
-            return _orig_fromarray(obj, mode)
-        _PILPatch.fromarray = _safe_fromarray
-
-        if TEXTURE_PIPELINE is None:
-            print("      Loading texture pipeline (first run only) ...")
-            TEXTURE_PIPELINE = Hunyuan3DPaintPipeline.from_pretrained(
-                "tencent/Hunyuan3D-2",
-            )
-            if hasattr(TEXTURE_PIPELINE, "to"):
-                TEXTURE_PIPELINE = TEXTURE_PIPELINE.to("cuda")
-            print("      Texture pipeline cached in VRAM ✓")
-
-        print("      Painting texture ...")
-        _t1 = time.time()
-        # NOTE: do NOT wrap the paint pipeline in torch.autocast — the multi-view
-        # UNet manages its own dtypes and autocast causes shape/index errors
-        # ("too many indices for tensor of dimension 3") on newer diffusers.
-        # The texture pipeline expects RGB; alpha is applied separately as a mask.
-        _tex_image = image.convert("RGB") if image.mode != "RGB" else image
-        with _tqdm_progress(31, 54, "Texture paint"), torch.inference_mode():
-            mesh = TEXTURE_PIPELINE(mesh, image=_tex_image)
-        print(f"      Texture done in {time.time() - _t1:.1f}s")
-        print("      Texture applied ✓")
-
-    except Exception as e:
-        import traceback
-        print(f"      ⚠ Texture skipped ({type(e).__name__}: {e})")
-        traceback.print_exc()
-        # Real fallback: bake the dominant color of the input image onto the
-        # mesh as a flat PBR base color so the product isn't pure white.
-        try:
-            mesh = _apply_dominant_color_fallback(mesh, image_path)
-            print("      Applied dominant-color fallback material ✓")
-        except Exception as _fb_e:
-            print(f"      ⚠ Color fallback also failed ({_fb_e}) — mesh will be untextured")
+        mesh = _apply_dominant_color_fallback(mesh, image_path)
+        print("      Dominant-color material applied ✓")
+    except Exception as _fb_e:
+        print(f"      ⚠ Dominant-color material failed ({_fb_e}) — mesh will export untextured")
 
     # ── Export ─────────────────────────────────────────────────────────────────
     generated = work_dir / "model.glb"
@@ -461,16 +410,13 @@ def render_scene(
         )
     print(f"      [render] Using Blender: {blender_bin}")
 
-    # ── Free VRAM held by Hunyuan pipelines so Blender Cycles has room ────────
-    # Cached pipelines pin ~13 GB on a 16 GB card; without releasing them,
-    # Cycles fails to allocate its device buffer and silently falls back to CPU.
+    # ── Free VRAM held by the shape pipeline so Blender Cycles has room ───────
     try:
         import gc
         import torch
-        global SHAPE_PIPELINE, TEXTURE_PIPELINE
-        if SHAPE_PIPELINE is not None or TEXTURE_PIPELINE is not None:
+        global SHAPE_PIPELINE
+        if SHAPE_PIPELINE is not None:
             SHAPE_PIPELINE = None
-            TEXTURE_PIPELINE = None
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()

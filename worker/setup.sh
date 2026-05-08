@@ -72,27 +72,27 @@ echo "      Installing rembg[gpu] + onnxruntime-gpu ..."
 # to the system-site version which can be outdated or broken
 "$PIP" install "huggingface-hub>=0.20.0" --force-reinstall --quiet
 
-# ── nvdiffrast ────────────────────────────────────────────
-# CUDA rasterizer for Hunyuan3D-2 texture baking — not on PyPI
-if ! "$PY" -c "import nvdiffrast" 2>/dev/null; then
-  echo "      Installing nvdiffrast from source (needs CUDA toolkit + gcc) ..."
-  "$PIP" install git+https://github.com/NVlabs/nvdiffrast.git \
-    --no-build-isolation --quiet 2>/dev/null \
-    && echo "      nvdiffrast installed ✓" \
-    || echo "      ⚠ nvdiffrast skipped (needs CUDA toolkit + gcc) — texturing uses fallback materials"
-else
-  echo "      nvdiffrast already available ✓"
-fi
+# nvdiffrast / custom_rasterizer were Phase-0 deps for the Hunyuan paint
+# pipeline. Phase 1 is shape-only with a flat dominant-color material, so
+# we no longer need them. (Re-enable when we add PBR paint in Phase 3.)
 
 echo "      Python env ready ✓"
 
-# ── 2. Hunyuan3D-2 ────────────────────────────────────────
+# ── 2. Hunyuan3D-2.1 ──────────────────────────────────────
 echo ""
-echo "[2/5] Cloning Hunyuan3D-2 ..."
-HUNYUAN_DIR="$PROJECT_ROOT/Hunyuan3D-2"
+echo "[2/5] Cloning Hunyuan3D-2.1 ..."
+HUNYUAN_DIR="$PROJECT_ROOT/Hunyuan3D-2.1"
+LEGACY_DIR="$PROJECT_ROOT/Hunyuan3D-2"
+
+# Migration: if old 2.0 dir exists and 2.1 doesn't, archive the old one so
+# users of older setup.sh don't have stale code on PYTHONPATH.
+if [ -d "$LEGACY_DIR" ] && [ ! -d "$HUNYUAN_DIR" ]; then
+  echo "      Found legacy Hunyuan3D-2 dir — renaming to Hunyuan3D-2.legacy"
+  mv "$LEGACY_DIR" "$LEGACY_DIR.legacy" || true
+fi
 
 if [ ! -d "$HUNYUAN_DIR" ]; then
-  git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git "$HUNYUAN_DIR"
+  git clone https://github.com/Tencent/Hunyuan3D-2.1.git "$HUNYUAN_DIR"
   echo "      Cloned ✓"
 else
   echo "      Already cloned — pulling latest ..."
@@ -101,20 +101,20 @@ fi
 
 echo "      Installing hy3dgen package ..."
 "$PIP" install -e "$HUNYUAN_DIR" --quiet
-# Re-pin huggingface_hub after hy3dgen may have downgraded it
 "$PIP" install "huggingface-hub>=0.20.0" --force-reinstall --quiet
 echo "      hy3dgen installed ✓"
 
-# ── Pre-fetch weights (optional ~7GB) ─────────────────────
-echo "      Pre-fetching Hunyuan3D-2 weights (~7GB, Ctrl-C to skip) ..."
+# ── Pre-fetch SHAPE weights only (~3GB; paint weights skipped in Phase 1) ─
+echo "      Pre-fetching Hunyuan3D-2.1 shape weights (~3GB, Ctrl-C to skip) ..."
 "$PY" -c "
 from huggingface_hub import snapshot_download
 snapshot_download(
-    repo_id='tencent/Hunyuan3D-2',
+    repo_id='tencent/Hunyuan3D-2.1',
     local_dir='$HUNYUAN_DIR/weights',
-    ignore_patterns=['*.md', '*.txt']
+    allow_patterns=['hunyuan3d-dit-*/*', '*.json', '*.md'],
+    ignore_patterns=['hunyuan3d-paint*/*', '*.txt'],
 )
-print('      Weights downloaded ✓')
+print('      Shape weights downloaded ✓')
 " && true || echo "      ⚠ Weight pre-fetch skipped — worker downloads on first job automatically."
 
 # ── 3. rembg model cache ──────────────────────────────────

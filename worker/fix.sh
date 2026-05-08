@@ -8,7 +8,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-HUNYUAN_DIR="$PROJECT_ROOT/Hunyuan3D-2"
+HUNYUAN_DIR="$PROJECT_ROOT/Hunyuan3D-2.1"
 
 VENV="$SCRIPT_DIR/.venv"
 PY="$VENV/bin/python3"
@@ -164,18 +164,10 @@ if [ -d "$HUNYUAN_DIR" ]; then
   echo "    hy3dgen installed ✓"
 else
   echo ""
-  echo "[5] ⚠ Hunyuan3D-2 not found at $HUNYUAN_DIR — run setup.sh first"
+  echo "[5] ⚠ Hunyuan3D-2.1 not found at $HUNYUAN_DIR — run setup.sh first"
 fi
 
-# ── nvdiffrast (optional) ─────────────────────────────────
-if ! "$PY" -c "import nvdiffrast" 2>/dev/null; then
-  echo ""
-  echo "[6] Installing nvdiffrast (optional, needs CUDA toolkit + gcc) ..."
-  "$PIP" install git+https://github.com/NVlabs/nvdiffrast.git \
-    --no-build-isolation --quiet 2>/dev/null \
-    && echo "    nvdiffrast installed ✓" \
-    || echo "    ⚠ nvdiffrast skipped — texturing will use Blender materials instead"
-fi
+# nvdiffrast removed in Phase 1 (shape-only path doesn't need it).
 
 # ── Blender PATH ──────────────────────────────────────────
 if ! grep -qF '.local/bin' "$HOME/.bashrc" 2>/dev/null; then
