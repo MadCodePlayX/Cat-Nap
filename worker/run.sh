@@ -130,7 +130,9 @@ _resolve_blender() {
       "/mnt/c/Program Files/Blender Foundation/Blender 5.1/blender.exe" \
       "/mnt/c/Program Files/Blender Foundation/Blender 4.3/blender.exe"; do
       if [ -f "$candidate" ]; then
-        wslpath -w "$candidate"
+        # Keep as /mnt/... WSL path — subprocess.Popen inside WSL needs this.
+        # WSL interop automatically executes the .exe via the Windows kernel.
+        echo "$candidate"
         return
       fi
     done
