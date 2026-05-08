@@ -153,6 +153,14 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     scene.render.fps = 24
     scene.frame_start = 1
     scene.frame_end = 72  # 3 seconds
+    # Keep static BVH/shader data across frames (huge CPU win for camera-only shots).
+    scene.render.use_persistent_data = True
+    # Cycles still uses CPU for sync/BVH even in GPU mode; cap helper threads.
+    _threads = int(os.environ.get("CATNAP_BLENDER_THREADS", "6"))
+    if _threads > 0:
+        scene.render.threads_mode = "FIXED"
+        scene.render.threads = _threads
+    print(f"  [GPU] CPU assist threads: {scene.render.threads}", flush=True)
 
     # ── Camera dolly animation ─────────────────────────────────────────────────
     cam.location = (3.5, 2.5, 1.8)

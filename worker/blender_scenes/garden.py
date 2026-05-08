@@ -4,6 +4,7 @@ Blender scene: Garden / Outdoor
 import bpy
 import sys
 import math
+import os
 
 
 def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail_path):
@@ -123,6 +124,12 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     scene.render.fps = 24
     scene.frame_start = 1
     scene.frame_end = 72
+    scene.render.use_persistent_data = True
+    _threads = int(os.environ.get("CATNAP_BLENDER_THREADS", "6"))
+    if _threads > 0:
+        scene.render.threads_mode = "FIXED"
+        scene.render.threads = _threads
+    print(f"  [GPU] CPU assist threads: {scene.render.threads}", flush=True)
 
     cam.keyframe_insert("location", frame=1)
     cam.location = (2.0, 3.5, 1.8)
