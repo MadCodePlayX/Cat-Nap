@@ -37,3 +37,5 @@ tqdm==4.66.5
 opencv-python==4.10.0.84
 imageio==2.36.0
 scikit-image==0.24.0
+timm>=1.0.0
+torchdiffeq>=0.2.4

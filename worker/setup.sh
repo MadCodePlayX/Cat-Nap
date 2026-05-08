@@ -195,6 +195,8 @@ echo "      Hunyuan3D-2.1 deps (pinned) ..."
   "opencv-python==4.10.0.84" \
   "imageio==2.36.0" \
   "scikit-image==0.24.0" \
+  "timm>=1.0.0" \
+  "torchdiffeq>=0.2.4" \
   --quiet
 
 echo "      rembg + onnxruntime-gpu ..."
@@ -329,6 +331,7 @@ chk('trimesh',      lambda: bool(__import__('trimesh').__version__))
 chk('einops',       lambda: bool(__import__('einops').__version__))
 chk('scipy',        lambda: bool(__import__('scipy').__version__))
 chk('omegaconf',    lambda: bool(__import__('omegaconf').__version__))
+chk('timm',         lambda: bool(__import__('timm').__version__))
 chk('requests',     lambda: bool(__import__('requests').__version__))
 chk('websocket',    lambda: bool(__import__('websocket').__version__))
 
