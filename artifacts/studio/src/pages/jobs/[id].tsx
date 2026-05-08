@@ -148,12 +148,14 @@ export default function JobDetail() {
                   {job.modelUrl ? (
                     <div className="aspect-video bg-muted rounded-lg border border-border flex items-center justify-center relative overflow-hidden group">
                       {job.thumbnailUrl ? (
-                        <img src={job.thumbnailUrl} alt="Model Thumbnail" className="w-full h-full object-cover" />
+                        <img src={job.thumbnailUrl} alt="3D model thumbnail" className="w-full h-full object-cover" />
                       ) : (
                         <Box className="h-12 w-12 text-muted-foreground opacity-50" />
                       )}
                       <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Button variant="secondary" size="sm">Download GLB</Button>
+                        <a href={job.modelUrl} download target="_blank" rel="noreferrer">
+                          <Button variant="secondary" size="sm">Download GLB</Button>
+                        </a>
                       </div>
                     </div>
                   ) : (
