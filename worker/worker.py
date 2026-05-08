@@ -276,7 +276,7 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     if hunyuan_dir is None:
         hunyuan_dir = WORKER_DIR.parent / "Hunyuan3D-2.1"
 
-    if not (hunyuan_dir / "hy3dgen").exists():
+    if not (hunyuan_dir / "hy3dshape").exists():
         raise RuntimeError(
             f"Hunyuan3D-2.1 not found at {hunyuan_dir}.\n"
             "Run: git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "
@@ -285,13 +285,17 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
             "(No pip install -e needed: the worker adds it to sys.path directly.)"
         )
 
+    # 2.1 restructured: the importable package is inside hy3dshape/
+    hy3dshape_dir = str(hunyuan_dir / "hy3dshape")
+    if hy3dshape_dir not in sys.path:
+        sys.path.insert(0, hy3dshape_dir)
     if str(hunyuan_dir) not in sys.path:
         sys.path.insert(0, str(hunyuan_dir))
     if str(WORKER_DIR) not in sys.path:
         sys.path.insert(0, str(WORKER_DIR))
 
     from PIL import Image as PILImage
-    from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
+    from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
     work_dir.mkdir(parents=True, exist_ok=True)
     image = PILImage.open(image_path).convert("RGBA")
@@ -340,6 +344,7 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         SHAPE_PIPELINE = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             "tencent/Hunyuan3D-2.1",
             device="cuda",
+            use_safetensors=True,
         )
         if hasattr(SHAPE_PIPELINE, "model"):
             SHAPE_PIPELINE.model = SHAPE_PIPELINE.model.to(

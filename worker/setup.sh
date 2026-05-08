@@ -99,6 +99,11 @@ else
   git -C "$HUNYUAN_DIR" pull
 fi
 
+# Validate the clone has the expected structure
+if [ ! -d "$HUNYUAN_DIR/hy3dshape" ]; then
+  echo "      ⚠ hy3dshape subdir missing — clone may be incomplete or wrong repo"
+fi
+
 # Hunyuan3D-2.1 is not pip-installable (no setup.py/pyproject.toml).
 # The worker adds it to sys.path directly. We just install its Python deps.
 echo "      Installing Hunyuan3D-2.1 Python deps ..."
