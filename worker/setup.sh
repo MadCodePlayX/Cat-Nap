@@ -20,7 +20,20 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 HUNYUAN_DIR="$PROJECT_ROOT/Hunyuan3D-2.1"
-VENV="$SCRIPT_DIR/.venv"
+# Venv location:
+# - default: worker/.venv
+# - WSL + /mnt/* workspace: use Linux filesystem to avoid NTFS symlink issues
+# - override anytime via CATNAP_VENV=/path/to/venv
+DEFAULT_VENV="$SCRIPT_DIR/.venv"
+if [[ "$SCRIPT_DIR" == /mnt/* ]]; then
+  SAFE_NAME="$(basename "$PROJECT_ROOT" | tr '[:space:]' '_' | tr -cd '[:alnum:]_-')"
+  SAFE_VENV="$HOME/.venvs/${SAFE_NAME}-worker"
+  VENV="${CATNAP_VENV:-$SAFE_VENV}"
+  echo "      [info] Workspace is on /mnt/* (Windows drive)."
+  echo "      [info] Using Linux-side venv at: $VENV"
+else
+  VENV="${CATNAP_VENV:-$DEFAULT_VENV}"
+fi
 
 print_header() {
   echo ""
