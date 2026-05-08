@@ -107,9 +107,16 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
             print(f"        • {_dev.name}", flush=True)
         break
     if _chosen_backend is None:
-        print("  [GPU] ⚠ No Cycles GPU backend available — falling back to CPU", flush=True)
+        print("  [GPU] ✗ No Cycles GPU backend available", flush=True)
         print(f"        Available devices: {[(d.name, d.type) for d in _cprefs.devices]}", flush=True)
-        scene.cycles.device = 'CPU'
+        if os.environ.get("CATNAP_ALLOW_CPU_FALLBACK", "0") == "1":
+            print("  [GPU] CATNAP_ALLOW_CPU_FALLBACK=1 -> using CPU render", flush=True)
+            scene.cycles.device = 'CPU'
+        else:
+            raise RuntimeError(
+                "Cycles GPU backend not available. Set CATNAP_ALLOW_CPU_FALLBACK=1 "
+                "to force CPU rendering."
+            )
     else:
         scene.cycles.device = 'GPU'
     print(f"  [GPU] Final cycles device: {scene.cycles.device}", flush=True)
@@ -125,11 +132,14 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
     scene.frame_start = 1
     scene.frame_end = 72
     scene.render.use_persistent_data = True
-    _threads = int(os.environ.get("CATNAP_BLENDER_THREADS", "6"))
+    _threads = int(os.environ.get("CATNAP_BLENDER_THREADS", "0"))
     if _threads > 0:
         scene.render.threads_mode = "FIXED"
         scene.render.threads = _threads
-    print(f"  [GPU] CPU assist threads: {scene.render.threads}", flush=True)
+    else:
+        scene.render.threads_mode = "AUTO"
+    print(f"  [GPU] CPU assist threads mode: {scene.render.threads_mode} "
+          f"(threads={scene.render.threads})", flush=True)
 
     cam.keyframe_insert("location", frame=1)
     cam.location = (1.8, 3.0, 1.5)
