@@ -111,30 +111,36 @@ def setup_scene(model_glb_path, animal_type, output_video_path, output_thumbnail
         except TypeError:
             print(f"  [GPU] backend {_dtype} not compiled into this Blender build")
             continue
-        _refresh = getattr(_cprefs, 'refresh_devices', None) or getattr(_cprefs, 'get_devices', None)
-        if _refresh is not None:
-            try:
+        # Blender 5.x can expose both APIs; run both to reliably populate
+        # _cprefs.devices across Linux/WSL builds.
+        _refresh = getattr(_cprefs, 'refresh_devices', None)
+        _get = getattr(_cprefs, 'get_devices', None)
+        try:
+            if callable(_refresh):
                 _refresh()
-            except Exception as _e:
-                print(f"  [GPU] {_dtype}: refresh_devices() failed: {_e}")
-                continue
+            if callable(_get):
+                _get()
+        except Exception as _e:
+            print(f"  [GPU] {_dtype}: device refresh failed: {_e}", flush=True)
+            continue
         _gpu_devs = [d for d in _cprefs.devices if d.type != 'CPU']
         if not _gpu_devs:
-            print(f"  [GPU] {_dtype}: no non-CPU devices found")
+            print(f"  [GPU] {_dtype}: no non-CPU devices found", flush=True)
             continue
         for _dev in _cprefs.devices:
             _dev.use = (_dev.type != 'CPU')
         _chosen_backend = _dtype
-        print(f"  [GPU] Cycles backend: {_dtype} ✓ ({len(_gpu_devs)} device(s))")
+        print(f"  [GPU] Cycles backend: {_dtype} ✓ ({len(_gpu_devs)} device(s))", flush=True)
         for _dev in _gpu_devs:
-            print(f"        • {_dev.name}")
+            print(f"        • {_dev.name}", flush=True)
         break
     if _chosen_backend is None:
-        print("  [GPU] ⚠ No Cycles GPU backend available — falling back to CPU")
-        print(f"        Available devices: {[(d.name, d.type) for d in _cprefs.devices]}")
+        print("  [GPU] ⚠ No Cycles GPU backend available — falling back to CPU", flush=True)
+        print(f"        Available devices: {[(d.name, d.type) for d in _cprefs.devices]}", flush=True)
         scene.cycles.device = 'CPU'
     else:
         scene.cycles.device = 'GPU'
+    print(f"  [GPU] Final cycles device: {scene.cycles.device}", flush=True)
     # OptiX denoiser: 64 samples + denoising ≈ 512 samples without, far faster
     scene.cycles.use_denoising = True
     try:
