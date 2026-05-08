@@ -344,7 +344,9 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
         SHAPE_PIPELINE = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             "tencent/Hunyuan3D-2.1",
             device="cuda",
-            use_safetensors=True,
+            # Repo ships shape weights as model.fp16.ckpt (not safetensors).
+            # Forcing safetensors makes the loader look for a non-existent file.
+            use_safetensors=False,
         )
         if hasattr(SHAPE_PIPELINE, "model"):
             SHAPE_PIPELINE.model = SHAPE_PIPELINE.model.to(
