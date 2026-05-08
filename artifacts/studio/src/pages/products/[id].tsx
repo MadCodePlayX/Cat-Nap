@@ -3,18 +3,52 @@ import { Link, useRoute } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Image as ImageIcon, ArrowLeft, PlaySquare, Plus } from "lucide-react";
+import { Image as ImageIcon, ArrowLeft, PlaySquare, Plus, Loader2, X } from "lucide-react";
 import { CreateJobDialog } from "@/components/jobs/create-job-dialog";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function ProductDetail() {
   const [, params] = useRoute("/products/:id");
   const id = params?.id ? parseInt(params.id) : 0;
-  
+
   const { data: product, isLoading } = useGetProduct(id, {
     query: { enabled: !!id, queryKey: getGetProductQueryKey(id) }
   });
 
   const { data: jobs, isLoading: jobsLoading } = useListJobs({ productId: id });
+
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const { mutateAsync: addImage } = useAddProductImage();
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
+      const { url } = await res.json();
+
+      await addImage({ id, data: { imageUrl: url } });
+      await queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(id) });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   if (isLoading) {
     return <div className="p-6">Loading product...</div>;
@@ -52,19 +86,50 @@ export default function ProductDetail() {
                 <div className="grid grid-cols-2 gap-2">
                   {product.imageUrls.map((url, i) => (
                     <div key={i} className="aspect-square bg-muted rounded-md overflow-hidden border border-border">
-                      <img src={url} alt={`${product.name} ${i}`} className="w-full h-full object-cover" />
+                      <img src={url} alt={`${product.name} ${i + 1}`} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="aspect-square bg-muted rounded-md flex items-center justify-center text-muted-foreground border border-dashed border-border">
-                  <ImageIcon className="h-8 w-8 mb-2 opacity-50" />
+                <div className="aspect-square bg-muted rounded-md flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border gap-2">
+                  <ImageIcon className="h-8 w-8 opacity-50" />
                   <span className="text-sm">No images</span>
                 </div>
               )}
-              <Button variant="outline" className="w-full">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Image
+
+              {uploadError && (
+                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                  <span className="flex-1">{uploadError}</span>
+                  <button onClick={() => setUploadError(null)}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Image
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
