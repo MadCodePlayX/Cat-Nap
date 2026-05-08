@@ -2,6 +2,7 @@
 requests>=2.31.0
 Pillow>=10.0.0
 rembg==2.0.65          # background removal; pinned to match Hunyuan3D-2.1 reqs
+onnxruntime-gpu>=1.17.0 # rembg backend — GPU-accelerated; falls back to CPU automatically
 websocket-client>=1.7.0 # ComfyUI WS progress streaming (falls back to polling)
 
 # ── PyTorch (CUDA wheels) ─────────────────────────────────────────────────────
