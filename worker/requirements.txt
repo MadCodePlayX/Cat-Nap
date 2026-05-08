@@ -4,13 +4,15 @@ Pillow>=10.0.0
 rembg==2.0.65          # background removal; pinned to match Hunyuan3D-2.1 reqs
 websocket-client>=1.7.0 # ComfyUI WS progress streaming (falls back to polling)
 
-# ── PyTorch (MUST be installed from the CUDA wheel index, NOT PyPI) ───────────
-# pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
-#   --index-url https://download.pytorch.org/whl/cu124
-# Do NOT run bare "pip install -r requirements.txt" for the torch lines above —
-# PyPI torch wheels are CPU-only. See setup.sh / fix.sh for the correct command.
-torch==2.6.0
-# torchvision intentionally omitted here; install separately from CUDA index.
+# ── PyTorch (CUDA wheels) ─────────────────────────────────────────────────────
+# --extra-index-url lets pip find the CUDA builds here first, then fall back
+# to PyPI for everything else in this file. This means you can simply run:
+#   pip install -r requirements.txt
+# and get CUDA-enabled torch/torchvision without any separate install step.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
 
 # ── Hunyuan3D-2.1 deps (pinned to match its requirements.txt) ─────────────────
 # Repo: https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1
