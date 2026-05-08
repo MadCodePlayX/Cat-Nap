@@ -1,19 +1,36 @@
+# ── Core worker deps ──────────────────────────────────────────────────────────
 requests>=2.31.0
 Pillow>=10.0.0
-rembg[gpu]>=2.0.50
-numpy>=1.24.0
+rembg==2.0.65          # background removal; pinned to match Hunyuan3D-2.1 reqs
+websocket-client>=1.7.0 # ComfyUI WS progress streaming (falls back to polling)
+
+# ── PyTorch (MUST be installed from the CUDA wheel index, NOT PyPI) ───────────
+# pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
+#   --index-url https://download.pytorch.org/whl/cu124
+# Do NOT run bare "pip install -r requirements.txt" for the torch lines above —
+# PyPI torch wheels are CPU-only. See setup.sh / fix.sh for the correct command.
 torch==2.6.0
-# torchvision intentionally omitted — must be installed from the CUDA wheel
-# index alongside torch (see setup.sh / fix.sh). PyPI build lacks CUDA ops.
-tqdm>=4.65.0
-huggingface-hub>=0.20.0
-trimesh>=4.0.0
-# Hunyuan3D-2 paint pipeline is pinned against diffusers 0.30.x / transformers
-# 4.45.x. Newer versions reorganise the diffusers_modules cache layout, which
-# makes the dynamic UNet2p5DConditionModel load from the wrong path and crash
-# inside texture inference with "too many indices for tensor of dimension 3".
-diffusers>=0.30.0,<0.32.0
-transformers>=4.45.0,<4.50.0
-accelerate>=0.27.0
-einops>=0.7.0
-scipy>=1.11.0
+# torchvision intentionally omitted here; install separately from CUDA index.
+
+# ── Hunyuan3D-2.1 deps (pinned to match its requirements.txt) ─────────────────
+# Repo: https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1
+# Not pip-installable (no setup.py). Clone it separately and pass
+# --hunyuan-dir to the worker. These are the Python deps it needs at runtime.
+transformers==4.46.0
+diffusers==0.30.0
+accelerate==1.1.1
+huggingface-hub==0.30.2
+safetensors==0.4.4
+numpy==1.24.4
+scipy==1.14.1
+einops==0.8.0
+trimesh==4.4.7
+pymeshlab==2022.2.post3
+pygltflib==1.16.3
+xatlas==0.0.9
+open3d==0.18.0
+omegaconf==2.3.0
+tqdm==4.66.5
+opencv-python==4.10.0.84
+imageio==2.36.0
+scikit-image==0.24.0
