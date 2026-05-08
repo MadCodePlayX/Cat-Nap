@@ -110,6 +110,17 @@ fi
 PY="$VENV/bin/python3"
 PIP="$VENV/bin/pip"
 
+# Activate target venv for this script run when not already active.
+# (If setup.sh is executed, activation only affects this process; users still
+# need to `source <venv>/bin/activate` in their own shell after setup.)
+if [ -z "${VIRTUAL_ENV:-}" ] || [ "$VIRTUAL_ENV" != "$VENV" ]; then
+  if [ -f "$VENV/bin/activate" ]; then
+    # shellcheck disable=SC1090
+    source "$VENV/bin/activate"
+    echo "      [info] Activated venv for setup: $VENV"
+  fi
+fi
+
 "$PIP" install --upgrade pip wheel --quiet
 echo "      pip upgraded ✓"
 
@@ -356,6 +367,9 @@ echo "    --worker-name 'Local-RTX4080S' \\"
 echo "    --gpu-model 'NVIDIA RTX 4080 Super' \\"
 echo "    --hunyuan-dir $HUNYUAN_DIR \\"
 echo "    --blender-path \$(which blender)"
+echo ""
+echo "  or use the launcher (auto-activates venv):"
+echo "    bash $SCRIPT_DIR/run.sh --api-url https://cat-nap.replit.app"
 echo ""
 echo "  (on Windows add:)"
 echo "    --blender-path 'D:\\blender-5.1.1\\...\\blender.exe' \\"
