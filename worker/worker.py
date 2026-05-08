@@ -279,8 +279,10 @@ def generate_3d_hunyuan(image_path: Path, output_glb: Path, work_dir: Path,
     if not (hunyuan_dir / "hy3dgen").exists():
         raise RuntimeError(
             f"Hunyuan3D-2.1 not found at {hunyuan_dir}.\n"
-            "Run: git clone https://github.com/Tencent/Hunyuan3D-2.1.git "
-            f"{hunyuan_dir} && pip install -e {hunyuan_dir}"
+            "Run: git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "
+            f"{hunyuan_dir}\n"
+            "Then install its deps — see worker/setup.sh [2/5] for the pip install list.\n"
+            "(No pip install -e needed: the worker adds it to sys.path directly.)"
         )
 
     if str(hunyuan_dir) not in sys.path:

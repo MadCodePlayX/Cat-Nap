@@ -155,13 +155,32 @@ echo "    Core packages installed ✓"
 "$PIP" install "rembg[gpu]>=2.0.50" onnxruntime-gpu --quiet
 echo "    rembg[gpu] + onnxruntime-gpu installed ✓"
 
-# ── hy3dgen ───────────────────────────────────────────────
+# ── Hunyuan3D-2.1 deps ────────────────────────────────────
+# The repo has no setup.py — install its deps directly.
 if [ -d "$HUNYUAN_DIR" ]; then
   echo ""
-  echo "[5] Installing hy3dgen ..."
-  "$PIP" install -e "$HUNYUAN_DIR" --quiet
-  "$PIP" install "huggingface-hub>=0.20.0" --force-reinstall --quiet
-  echo "    hy3dgen installed ✓"
+  echo "[5] Installing Hunyuan3D-2.1 Python deps ..."
+  "$PIP" install \
+    "transformers==4.46.0" \
+    "diffusers==0.30.0" \
+    "accelerate==1.1.1" \
+    "huggingface-hub==0.30.2" \
+    "safetensors==0.4.4" \
+    "numpy==1.24.4" \
+    "scipy==1.14.1" \
+    "einops==0.8.0" \
+    "trimesh==4.4.7" \
+    "pymeshlab==2022.2.post3" \
+    "pygltflib==1.16.3" \
+    "xatlas==0.0.9" \
+    "omegaconf==2.3.0" \
+    "tqdm==4.66.5" \
+    "opencv-python==4.10.0.84" \
+    "imageio==2.36.0" \
+    "scikit-image==0.24.0" \
+    "rembg==2.0.65" \
+    --quiet
+  echo "    Hunyuan3D-2.1 deps installed ✓"
 else
   echo ""
   echo "[5] ⚠ Hunyuan3D-2.1 not found at $HUNYUAN_DIR — run setup.sh first"

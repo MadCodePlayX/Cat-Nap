@@ -99,10 +99,31 @@ else
   git -C "$HUNYUAN_DIR" pull
 fi
 
-echo "      Installing hy3dgen package ..."
-"$PIP" install -e "$HUNYUAN_DIR" --quiet
-"$PIP" install "huggingface-hub>=0.20.0" --force-reinstall --quiet
-echo "      hy3dgen installed ✓"
+# Hunyuan3D-2.1 is not pip-installable (no setup.py/pyproject.toml).
+# The worker adds it to sys.path directly. We just install its Python deps.
+echo "      Installing Hunyuan3D-2.1 Python deps ..."
+"$PIP" install \
+  "transformers==4.46.0" \
+  "diffusers==0.30.0" \
+  "accelerate==1.1.1" \
+  "huggingface-hub==0.30.2" \
+  "safetensors==0.4.4" \
+  "numpy==1.24.4" \
+  "scipy==1.14.1" \
+  "einops==0.8.0" \
+  "trimesh==4.4.7" \
+  "pymeshlab==2022.2.post3" \
+  "pygltflib==1.16.3" \
+  "xatlas==0.0.9" \
+  "open3d==0.18.0" \
+  "omegaconf==2.3.0" \
+  "tqdm==4.66.5" \
+  "opencv-python==4.10.0.84" \
+  "imageio==2.36.0" \
+  "scikit-image==0.24.0" \
+  "rembg==2.0.65" \
+  --quiet
+echo "      Hunyuan3D-2.1 deps installed ✓"
 
 # ── Pre-fetch SHAPE weights only (~3GB; paint weights skipped in Phase 1) ─
 echo "      Pre-fetching Hunyuan3D-2.1 shape weights (~3GB, Ctrl-C to skip) ..."
